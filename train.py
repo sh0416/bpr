@@ -6,9 +6,9 @@ import numpy as np
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import torch.optim as optim
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset
+
 
 class TripletUniformPair(Dataset):
     def __init__(self, w, num_item, pair, args):
@@ -18,10 +18,10 @@ class TripletUniformPair(Dataset):
         self.batch_size = args.batch_size
 
     def __getitem__(self, idx):
-        idx = np.random.choice(self.pair.shape[0], size=args.batch_size)
+        idx = np.random.choice(self.pair.shape[0], size=self.batch_size)
         u = self.pair[idx, 0]
         i = self.pair[idx, 1]
-        j = torch.multinomial(self.neg_w[u,:], num_samples=1).squeeze()
+        j = torch.multinomial(self.neg_w[u, :], num_samples=1).squeeze()
         return u, i, j
 
     def __len__(self):
@@ -35,8 +35,8 @@ class BPR(nn.Module):
         self.H = nn.Parameter(torch.rand(item_size, args.dim))
 
     def forward(self, u, i, j):
-        x_ui = torch.mul(self.W[u,:], self.H[i,:]).sum(dim=1)
-        x_uj = torch.mul(self.W[u,:], self.H[j,:]).sum(dim=1)
+        x_ui = torch.mul(self.W[u, :], self.H[i, :]).sum(dim=1)
+        x_uj = torch.mul(self.W[u, :], self.H[j, :]).sum(dim=1)
         x_uij = x_ui - x_uj
         log_prob = torch.log(torch.sigmoid(x_uij)).mean()
         return -log_prob
@@ -46,10 +46,10 @@ def precision_and_recall_k(user_emb, item_emb, train_w, test_w, klist):
     """Compute precision at k using GPU.
 
     Args:
-        user_emb (torch.Tensor): embedding for user (shape [user_num, dim])
-        item_emb (torch.Tensor): embedding for item (shape [item_num, dim])
-        train_w (torch.Tensor): mask array for train record (shape [user_num, item_num])
-        test_w (torch.Tensor): mask array for test record (shape [user_num, item_num])
+        user_emb (torch.Tensor): embedding for user [user_num, dim]
+        item_emb (torch.Tensor): embedding for item [item_num, dim]
+        train_w (torch.Tensor): mask array for train record [user_num, item_num]
+        test_w (torch.Tensor): mask array for test record [user_num, item_num]
         k (list(int)): list of k
     Returns:
         (torch.Tensor, torch.Tensor) Precision and recall at k
@@ -73,8 +73,9 @@ def precision_and_recall_k(user_emb, item_emb, train_w, test_w, klist):
     precisions, recalls = [], []
     for k in klist:
         topk_mask = torch.zeros_like(test_pred)
-        topk_mask.scatter_(dim=1, index=test_indices[:, :k],
-                src=torch.tensor(1.0).cuda())
+        topk_mask.scatter_(dim=1,
+                           index=test_indices[:, :k],
+                           src=torch.tensor(1.0).cuda())
         test_pred_topk = topk_mask * test_pred
 
         # Compare which is not zero and equal with test_true, which means that
@@ -85,36 +86,7 @@ def precision_and_recall_k(user_emb, item_emb, train_w, test_w, klist):
     return precisions, recalls
 
 
-if __name__=='__main__':
-    # Parse argument
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--data', type=str,
-            default=os.path.join('preprocessed', 'bpr-movielens-1m.pickle'),
-            help="File path for data")
-    # Model
-    parser.add_argument('--dim', type=int, default=4,
-            help="Dimension for embedding")
-    # Optimizer
-    parser.add_argument('--lr', type=float, default=1e-3,
-            help="Learning rate")
-    parser.add_argument('--weight_decay', type=float, default=0.000025,
-            help="Weight decay factor")
-    # Training
-    parser.add_argument('--n_epochs', type=int, default=10,
-            help="Number of epoch during training")
-    parser.add_argument('--batch_size', type=int, default=128,
-            help="Batch size in one iteration")
-    parser.add_argument('--print_every', type=int, default=10,
-            help="Period for printing smoothing loss during training")
-    parser.add_argument('--eval_every', type=int, default=1000,
-            help="Period for evaluating precision and recall during training")
-    parser.add_argument('--save_every', type=int, default=1000,
-            help="Period for saving model during training")
-    parser.add_argument('--model', type=str,
-            default=os.path.join('output', 'bpr.pt'),
-            help="File path for model")
-    args = parser.parse_args()
-
+def main(args):
     # Load preprocess data
     with open(args.data, 'rb') as f:
         dataset = pickle.load(f)
@@ -132,8 +104,9 @@ if __name__=='__main__':
     # Create dataset, model, optimizer
     dataset = TripletUniformPair(train_w, item_size, train_pair, args)
     model = BPR(user_size, item_size, args).cuda()
-    optimizer = optim.Adam(model.parameters(), lr=args.lr,
-            weight_decay=args.weight_decay)
+    optimizer = optim.Adam(model.parameters(),
+                           lr=args.lr,
+                           weight_decay=args.weight_decay)
 
     # Training
     smooth_loss = 0
@@ -148,10 +121,62 @@ if __name__=='__main__':
                 print('loss: %.4f' % smooth_loss)
             if idx % args.eval_every == (args.eval_every - 1):
                 plist, rlist = precision_and_recall_k(model.W.detach(),
-                        model.H.detach(), train_w, test_w, klist=[1,5,10])
-                print('P@1: %.4f, P@5: %.4f P@10: %.4f, R@1: %.4f, R@5: %.4f, R@10: %.4f' % \
-                        (plist[0], plist[1], plist[2], rlist[0], rlist[1], rlist[2]))
+                                                      model.H.detach(),
+                                                      train_w,
+                                                      test_w,
+                                                      klist=[1, 5, 10])
+                print('P@1: %.4f, P@5: %.4f P@10: %.4f, R@1: %.4f, R@5: %.4f, R@10: %.4f' % (plist[0], plist[1], plist[2], rlist[0], rlist[1], rlist[2]))
             if idx % args.save_every == (args.save_every - 1):
                 dirname = os.path.dirname(os.path.abspath(args.model))
                 os.makedirs(dirname, exist_ok=True)
                 torch.save(model.state_dict(), args.model)
+
+
+if __name__ == '__main__':
+    # Parse argument
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--data',
+                        type=str,
+                        default=os.path.join('preprocessed', 'bpr-movielens-1m.pickle'),
+                        help="File path for data")
+    # Model
+    parser.add_argument('--dim',
+                        type=int,
+                        default=4,
+                        help="Dimension for embedding")
+    # Optimizer
+    parser.add_argument('--lr',
+                        type=float,
+                        default=1e-3,
+                        help="Learning rate")
+    parser.add_argument('--weight_decay',
+                        type=float,
+                        default=0.000025,
+                        help="Weight decay factor")
+    # Training
+    parser.add_argument('--n_epochs',
+                        type=int,
+                        default=10,
+                        help="Number of epoch during training")
+    parser.add_argument('--batch_size',
+                        type=int,
+                        default=128,
+                        help="Batch size in one iteration")
+    parser.add_argument('--print_every',
+                        type=int,
+                        default=10,
+                        help="Period for printing smoothing loss during training")
+    parser.add_argument('--eval_every',
+                        type=int,
+                        default=1000,
+                        help="Period for evaluating precision and recall during training")
+    parser.add_argument('--save_every',
+                        type=int,
+                        default=1000,
+                        help="Period for saving model during training")
+    parser.add_argument('--model',
+                        type=str,
+                        default=os.path.join('output', 'bpr.pt'),
+                        help="File path for model")
+    args = parser.parse_args()
+    main(args)

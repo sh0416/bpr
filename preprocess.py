@@ -5,19 +5,24 @@ import argparse
 import numpy as np
 import pandas as pd
 
+
 def load_data(fpath, sep='::', engine='python'):
     # Load data
-    df = pd.read_csv(fpath, sep=sep, engine=engine,
-            names=['user', 'item', 'rate', 'time'])
-    df = df[df['user']>=3]
+    df = pd.read_csv(fpath,
+                     sep=sep,
+                     engine=engine,
+                     names=['user', 'item', 'rate', 'time'])
+    df = df[df['user'] >= 3]
     return df
 
+
 def convert_unique_idx(df, column_name):
-    column_dict = {x:i for i, x in enumerate(df[column_name].unique())}
+    column_dict = {x: i for i, x in enumerate(df[column_name].unique())}
     df[column_name] = df[column_name].apply(column_dict.get)
     assert df[column_name].min() == 0
     assert df[column_name].max() == len(column_dict) - 1
     return df
+
 
 def create_user_list(df, user_size):
     user_list = [dict() for u in range(user_size)]
@@ -25,9 +30,10 @@ def create_user_list(df, user_size):
         user_list[row['user']][row['item']] = row['time']
     return user_list
 
+
 def split_train_test(user_list, test_size=0.2, time_order=False):
     train_user_list = [None] * len(user_list)
-    test_user_list  = [None] * len(user_list)
+    test_user_list = [None] * len(user_list)
     for user, item_dict in enumerate(user_list):
         if time_order:
             # Choose latest item
@@ -45,27 +51,15 @@ def split_train_test(user_list, test_size=0.2, time_order=False):
         train_user_list[user] = set(item_dict.keys()) - test_item
     return train_user_list, test_user_list
 
+
 def create_pair(user_list):
     pair = []
     for user, item_set in enumerate(user_list):
         pair.extend([(user, item) for item in item_set])
     return pair
 
-if __name__=='__main__':
-    # Parse argument
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--input_data', type=str,
-            default=os.path.join('data', 'ml-1m', 'ratings.dat'),
-            help="File path for raw data")
-    parser.add_argument('--output_data', type=str,
-            default=os.path.join('preprocessed', 'bpr-movielens-1m.pickle'),
-            help="File path for preprocessed data")
-    parser.add_argument('--test_size', type=float, default=0.2,
-            help="Proportion for training and testing split")
-    parser.add_argument('--time_order', action='store_true',
-            help="Proportion for training and testing split")
-    args = parser.parse_args()
 
+def main(args):
     df = load_data(args.input_data)
     df = convert_unique_idx(df, 'user')
     df = convert_unique_idx(df, 'item')
@@ -93,3 +87,25 @@ if __name__=='__main__':
     os.makedirs(dirname, exist_ok=True)
     with open(args.output_data, 'wb') as f:
         pickle.dump(dataset, f, protocol=pickle.HIGHEST_PROTOCOL)
+
+
+if __name__ == '__main__':
+    # Parse argument
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--input_data',
+                        type=str,
+                        default=os.path.join('data', 'ml-1m', 'ratings.dat'),
+                        help="File path for raw data")
+    parser.add_argument('--output_data',
+                        type=str,
+                        default=os.path.join('preprocessed', 'bpr-movielens-1m.pickle'),
+                        help="File path for preprocessed data")
+    parser.add_argument('--test_size',
+                        type=float,
+                        default=0.2,
+                        help="Proportion for training and testing split")
+    parser.add_argument('--time_order',
+                        action='store_true',
+                        help="Proportion for training and testing split")
+    args = parser.parse_args()
+    main(args)
