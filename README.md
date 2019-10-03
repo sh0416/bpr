@@ -1,11 +1,10 @@
 Bayesian Personalized Ranking from Implicit Feedback
 ====================================================
 
-The repository implement the Bayesian Personalized Ranking using pyTorch.
-([https://arxiv.org/pdf/1205.2618](https://arxiv.org/pdf/1205.2618))
-Other repositories also implement this model, but the evaluation takes longer time.
-So, I implement this model using pyTorch with GPU acceleration for evaluation.
-Implementation detail will be explained in the following section.
+The repository implement the Bayesian Personalized Ranking using pyTorch ([https://arxiv.org/pdf/1205.2618](https://arxiv.org/pdf/1205.2618))  
+Other repositories also implement this model, but the evaluation takes longer time.  
+So, I implement this model using pyTorch with GPU acceleration for evaluation.  
+Implementation detail will be explained in the following section.  
 
 ## Set up environment
 
@@ -26,23 +25,27 @@ pip install -r requirements.txt
 
 ### 0. Prepare data
 
-This code support only the movielens 1m data.
-You can get the dataset from [here](https://grouplens.org/datasets/movielens/1m/).  
-*NOTE: If your dataset is structured like movielens 1m data, which means contains `user,item,rate,time`, then it will work.*  
+This code support the movielens 1m data and movielens 20m data.
+You can get the dataset from the following list.
+
+* [MovieLens 1M](https://grouplens.org/datasets/movielens/1m/).
+* [MovieLens 20M](https://grouplens.org/datasets/movielens/20m/).
 
 ### 1. Preprocess data
 
 For basic usage, execute following command line to preprocess the data.
 It **randomly** split the whole dataset into two parts, training data and test data.
 ```bash
-python preprocess.py
+python preprocess.py --dataset ml-1m --output_data preprocess/ml-1m.pickle
+python preprocess.py --dataset ml-20m --output_data preprocess/ml-20m.pickle
 ```
 
 If you want to split training data and test data with time order, then execute the following command line.
 This code **sorts the item list for each user using time order**. After that, it splits the whole data into two parts, training data and test data.
 First 80% of the item list will become the training data and the last 20% of the item list will become test data.
 ```bash
-python preprocess.py --time_order
+python preprocess.py --dataset ml-1m --output_data preprocess/ml-1m.pickle --time_order
+python preprocess.py --dataset ml-20m --output_data preprocess/ml-20m.pickle --time_order
 ```
 
 Help message will give you more detail description for arguments.
@@ -57,7 +60,8 @@ Now, for real show, let's train MF model using BPR-OPT loss.
 You can execute the following command to train MF model using BPR-OPT.
 
 ```bash
-python train.py
+python train.py --data preprocess/ml-1m.pickle
+python train.py --data preprocess/ml-20m.pickle
 ```
 
 Help message will give you more detail description for arguments.
@@ -79,10 +83,14 @@ The evaluation benchmark for movielens 1m is the following table.
 I think more tuning will get better result, but this value is reasonably around the
 statistic.
 
-| Dataset      | Preprocess | P@1    | P@5    | P@10   | R@1    | R@5    | R@10   |
-|--------------|------------|--------|--------|--------|--------|--------|--------|
-| Movielens-1m | Random     | 0.2421 | 0.2058 | 0.1821 | 0.0096 | 0.0392 | 0.0674 |
-| Movielens-1m | Time-order | 0.1307 | 0.1133 | 0.1034 | 0.0052 | 0.0216 | 0.0388 |
+| Dataset       | Preprocess | P@1    | P@5    | P@10   | R@1    | R@5    | R@10   |
+|---------------|------------|--------|--------|--------|--------|--------|--------|
+| Movielens-1m  | Random     | 0.2421 | 0.2058 | 0.1821 | 0.0096 | 0.0392 | 0.0674 |
+| Movielens-1m  | Time-order | 0.1307 | 0.1133 | 0.1034 | 0.0052 | 0.0216 | 0.0388 |
+| Movielens-20m | Random     | 0.2359 | 0.1790 | 0.1529 | 0.0118 | 0.0395 | 0.0652 |
+| Movielens-20m | Time-order | 0.1070 | 0.0887 | 0.0809 | 0.0059 | 0.0237 | 0.0431 |
+
+More information will get from the `result` directory.
 
 ## FAQ
 
@@ -97,4 +105,4 @@ Decrease the weight decay factor.
 ## Contact
 
 If you have any problem during simulating this code, open issue or contact me
-by sending email to sh0416@postech.ac.kr
+by sending email to seonghyeon.drew@gmail.com
