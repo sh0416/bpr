@@ -31,13 +31,16 @@ You can get the dataset from the following list.
 * [MovieLens 1M](https://grouplens.org/datasets/movielens/1m/).
 * [MovieLens 20M](https://grouplens.org/datasets/movielens/20m/).
 
+After downloading that file, unzip it.  
+We call the path for unzipped directory `$data_dir`.
+
 ### 1. Preprocess data
 
 For basic usage, execute following command line to preprocess the data.
 It **randomly** split the whole dataset into two parts, training data and test data.
 ```bash
-python preprocess.py --dataset ml-1m --output_data preprocess/ml-1m.pickle
-python preprocess.py --dataset ml-20m --output_data preprocess/ml-20m.pickle
+python preprocess.py --dataset ml-1m --data_dir $data_dir --output_data preprocess/ml-1m.pickle
+python preprocess.py --dataset ml-20m --data_dir $data_dir --output_data preprocess/ml-20m.pickle
 ```
 
 If you want to split training data and test data with time order, then execute the following command line.
