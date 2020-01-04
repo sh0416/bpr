@@ -39,16 +39,16 @@ We call the path for unzipped directory `$data_dir`.
 For basic usage, execute following command line to preprocess the data.
 It **randomly** split the whole dataset into two parts, training data and test data.
 ```bash
-python preprocess.py --dataset ml-1m --data_dir $data_dir --output_data preprocess/ml-1m.pickle
-python preprocess.py --dataset ml-20m --data_dir $data_dir --output_data preprocess/ml-20m.pickle
+python preprocess.py --dataset ml-1m --data_dir $data_dir --output_data preprocessed/ml-1m.pickle
+python preprocess.py --dataset ml-20m --data_dir $data_dir --output_data preprocessed/ml-20m.pickle
 ```
 
 If you want to split training data and test data with time order, then execute the following command line.
 This code **sorts the item list for each user using time order**. After that, it splits the whole data into two parts, training data and test data.
 First 80% of the item list will become the training data and the last 20% of the item list will become test data.
 ```bash
-python preprocess.py --dataset ml-1m --output_data preprocess/ml-1m.pickle --time_order
-python preprocess.py --dataset ml-20m --output_data preprocess/ml-20m.pickle --time_order
+python preprocess.py --dataset ml-1m --output_data preprocessed/ml-1m.pickle --time_order
+python preprocess.py --dataset ml-20m --output_data preprocessed/ml-20m.pickle --time_order
 ```
 
 Help message will give you more detail description for arguments.

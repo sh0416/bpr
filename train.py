@@ -6,6 +6,7 @@ import numpy as np
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
 
@@ -17,7 +18,6 @@ class TripletUniformPair(Dataset):
         self.pair = pair
 
     def __getitem__(self, idx):
-        idx = np.random.randint(len(self.pair))
         u = self.pair[idx][0]
         i = self.pair[idx][1]
         j = np.random.randint(self.num_item)
@@ -26,21 +26,28 @@ class TripletUniformPair(Dataset):
         return u, i, j
 
     def __len__(self):
-        return 10*len(self.pair)
+        return len(self.pair)
 
 
 class BPR(nn.Module):
-    def __init__(self, user_size, item_size, dim):
+    def __init__(self, user_size, item_size, dim, weight_decay):
         super().__init__()
-        self.W = nn.Parameter(torch.rand(user_size, dim))
-        self.H = nn.Parameter(torch.rand(item_size, dim))
+        self.W = nn.Parameter(torch.empty(user_size, dim))
+        self.H = nn.Parameter(torch.empty(item_size, dim))
+        nn.init.xavier_normal_(self.W.data)
+        nn.init.xavier_normal_(self.H.data)
+        self.weight_decay = weight_decay
 
     def forward(self, u, i, j):
-        x_ui = torch.mul(self.W[u, :], self.H[i, :]).sum(dim=1)
-        x_uj = torch.mul(self.W[u, :], self.H[j, :]).sum(dim=1)
+        u = self.W[u, :]
+        i = self.H[i, :]
+        j = self.H[j, :]
+        x_ui = torch.mul(u, i).sum(dim=1)
+        x_uj = torch.mul(u, j).sum(dim=1)
         x_uij = x_ui - x_uj
-        log_prob = torch.log(torch.sigmoid(x_uij)).mean()
-        return -log_prob
+        log_prob = F.logsigmoid(x_uij).sum()
+        regularization = self.weight_decay * (u.norm(dim=1).pow(2).sum() + i.norm(dim=1).pow(2).sum() + j.norm(dim=1).pow(2).sum())
+        return -log_prob + regularization
 
 
 def precision_and_recall_k(user_emb, item_emb, train_user_list, test_user_list, klist, batch=512):
@@ -84,7 +91,7 @@ def precision_and_recall_k(user_emb, item_emb, train_user_list, test_user_list, 
             test = test_user_list[i]
             pred = set(result[i, :k].numpy().tolist())
             val = len(test & pred)
-            precision += val / k
+            precision += val / min([k, len(test)])
             recall += val / len(test)
         precisions.append(precision / user_emb.shape[0])
         recalls.append(recall / user_emb.shape[0])
@@ -102,16 +109,15 @@ def main(args):
 
     # Create dataset, model, optimizer
     dataset = TripletUniformPair(item_size, train_user_list, train_pair)
-    loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True)
-    model = BPR(user_size, item_size, args.dim).cuda()
-    optimizer = optim.Adam(model.parameters(),
-                           lr=args.lr,
-                           weight_decay=args.weight_decay)
+    loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=32)
+    model = BPR(user_size, item_size, args.dim, args.weight_decay).cuda()
+    optimizer = optim.Adam(model.parameters(), lr=args.lr)
 
     # Training
     smooth_loss = 0
+    idx = 0
     for _ in range(args.n_epochs):
-        for idx, (u, i, j) in enumerate(loader):
+        for u, i, j in loader:
             optimizer.zero_grad()
             loss = model(u, i, j)
             loss.backward()
@@ -130,6 +136,7 @@ def main(args):
                 dirname = os.path.dirname(os.path.abspath(args.model))
                 os.makedirs(dirname, exist_ok=True)
                 torch.save(model.state_dict(), args.model)
+            idx += 1
 
 
 if __name__ == '__main__':
@@ -151,16 +158,16 @@ if __name__ == '__main__':
                         help="Learning rate")
     parser.add_argument('--weight_decay',
                         type=float,
-                        default=0.000025,
+                        default=0.025,
                         help="Weight decay factor")
     # Training
     parser.add_argument('--n_epochs',
                         type=int,
-                        default=10,
+                        default=1000,
                         help="Number of epoch during training")
     parser.add_argument('--batch_size',
                         type=int,
-                        default=128,
+                        default=4096,
                         help="Batch size in one iteration")
     parser.add_argument('--print_every',
                         type=int,
@@ -168,7 +175,7 @@ if __name__ == '__main__':
                         help="Period for printing smoothing loss during training")
     parser.add_argument('--eval_every',
                         type=int,
-                        default=10000,
+                        default=1000,
                         help="Period for evaluating precision and recall during training")
     parser.add_argument('--save_every',
                         type=int,
