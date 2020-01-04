@@ -11,7 +11,7 @@ Implementation detail will be explained in the following section.
 You have to install the following package before executing this code.
 
 * python==3.6
-* pytorch==1.0.0
+* pytorch==1.3.1
 * numpy==1.15.4
 * pandas==0.23.4
 
@@ -63,8 +63,8 @@ Now, for real show, let's train MF model using BPR-OPT loss.
 You can execute the following command to train MF model using BPR-OPT.
 
 ```bash
-python train.py --data preprocess/ml-1m.pickle
-python train.py --data preprocess/ml-20m.pickle
+python train.py --data preprocessed/ml-1m.pickle
+python train.py --data preprocessed/ml-20m.pickle
 ```
 
 Help message will give you more detail description for arguments.

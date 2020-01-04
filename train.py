@@ -9,6 +9,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
+from torch.utils.tensorboard import SummaryWriter
 
 
 class TripletUniformPair(Dataset):
@@ -77,6 +78,7 @@ def precision_and_recall_k(user_emb, item_emb, train_user_list, test_user_list, 
         # Calculate prediction value
         cur_result = torch.mm(user_emb[i:i+min(batch, user_emb.shape[0]-i), :], item_emb.t())
         cur_result = torch.sigmoid(cur_result)
+        assert not torch.any(torch.isnan(cur_result))
         # Make zero for already observed item
         cur_result = torch.mul(mask, cur_result)
         _, cur_result = torch.topk(cur_result, k=max_k, dim=1)
@@ -99,6 +101,10 @@ def precision_and_recall_k(user_emb, item_emb, train_user_list, test_user_list, 
 
 
 def main(args):
+    # Initialize seed
+    np.random.seed(args.seed)
+    torch.manual_seed(args.seed)
+
     # Load preprocess data
     with open(args.data, 'rb') as f:
         dataset = pickle.load(f)
@@ -112,6 +118,7 @@ def main(args):
     loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=32)
     model = BPR(user_size, item_size, args.dim, args.weight_decay).cuda()
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
+    writer = SummaryWriter()
 
     # Training
     smooth_loss = 0
@@ -122,9 +129,13 @@ def main(args):
             loss = model(u, i, j)
             loss.backward()
             optimizer.step()
+            writer.add_scalar('train/loss', loss, idx)
             smooth_loss = smooth_loss*0.99 + loss*0.01
             if idx % args.print_every == (args.print_every - 1):
                 print('loss: %.4f' % smooth_loss)
+                writer.add_histogram('user_gradnorm', model.W.grad[u, :].norm(dim=1))
+                writer.add_histogram('postivie_gradnorm', model.H.grad[i, :].norm(dim=1))
+                writer.add_histogram('negative_gradnorm', model.H.grad[j, :].norm(dim=1))
             if idx % args.eval_every == (args.eval_every - 1):
                 plist, rlist = precision_and_recall_k(model.W.detach(),
                                                       model.H.detach(),
@@ -132,6 +143,12 @@ def main(args):
                                                       test_user_list,
                                                       klist=[1, 5, 10])
                 print('P@1: %.4f, P@5: %.4f P@10: %.4f, R@1: %.4f, R@5: %.4f, R@10: %.4f' % (plist[0], plist[1], plist[2], rlist[0], rlist[1], rlist[2]))
+                writer.add_scalars('eval', {'P@1': plist[0],
+                                                      'P@5': plist[1],
+                                                      'P@10': plist[2]}, idx)
+                writer.add_scalars('eval', {'R@1': rlist[0],
+                                                   'R@5': rlist[1],
+                                                   'R@10': rlist[2]}, idx)
             if idx % args.save_every == (args.save_every - 1):
                 dirname = os.path.dirname(os.path.abspath(args.model))
                 os.makedirs(dirname, exist_ok=True)
@@ -146,6 +163,11 @@ if __name__ == '__main__':
                         type=str,
                         default=os.path.join('preprocessed', 'ml-1m.pickle'),
                         help="File path for data")
+    # Seed
+    parser.add_argument('--seed',
+                        type=int,
+                        default=0,
+                        help="Seed (For reproducability)")
     # Model
     parser.add_argument('--dim',
                         type=int,
