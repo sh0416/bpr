@@ -93,6 +93,18 @@ statistic.
 | Movielens-20m | Random     | 0.2359 | 0.1790 | 0.1529 | 0.0118 | 0.0395 | 0.0652 |
 | Movielens-20m | Time-order | 0.1070 | 0.0887 | 0.0809 | 0.0059 | 0.0237 | 0.0431 |
 
+### Training loss curve
+
+#### MovieLens 1M
+
+![](https://github.com/sh0416/bpr/blob/master/result/ml1m-loss.JPG)
+
+### Evaluation metric curve
+
+#### MovieLens 1M
+
+![](https://github.com/sh0416/bpr/blob/master/result/ml1m-eval.JPG)
+
 More information will get from the `result` directory.
 
 ## FAQ
