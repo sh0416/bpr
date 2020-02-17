@@ -50,6 +50,20 @@ class BPR(nn.Module):
         regularization = self.weight_decay * (u.norm(dim=1).pow(2).sum() + i.norm(dim=1).pow(2).sum() + j.norm(dim=1).pow(2).sum())
         return -log_prob + regularization
 
+    def recommend(self, u):
+        """Return recommended item list given users.
+
+        Args:
+            u(torch.LongTensor): tensor stored user indexes. [batch_size,]
+
+        Returns:
+            pred(torch.LongTensor): recommended item list sorted by preference.
+        """
+        u = self.W[u, :]
+        x_ui = torch.mm(u, self.H.t())
+        pred = torch.argsort(x_ui, dim=1)
+        return pred
+
 
 def precision_and_recall_k(user_emb, item_emb, train_user_list, test_user_list, klist, batch=512):
     """Compute precision at k using GPU.
