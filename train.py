@@ -40,6 +40,16 @@ class BPR(nn.Module):
         self.weight_decay = weight_decay
 
     def forward(self, u, i, j):
+        """Return loss value.
+        
+        Args:
+            u(torch.LongTensor): tensor stored user indexes. [batch_size,]
+            i(torch.LongTensor): tensor stored item indexes which is prefered by user. [batch_size,]
+            j(torch.LongTensor): tensor stored item indexes which is not prefered by user. [batch_size,]
+        
+        Returns:
+            torch.FloatTensor
+        """
         u = self.W[u, :]
         i = self.H[i, :]
         j = self.H[j, :]
@@ -57,7 +67,7 @@ class BPR(nn.Module):
             u(torch.LongTensor): tensor stored user indexes. [batch_size,]
 
         Returns:
-            pred(torch.LongTensor): recommended item list sorted by preference.
+            pred(torch.LongTensor): recommended item list sorted by preference. [batch_size, item_size]
         """
         u = self.W[u, :]
         x_ui = torch.mm(u, self.H.t())
