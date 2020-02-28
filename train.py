@@ -1,6 +1,8 @@
 import os
+import random
 import pickle
 import argparse
+from collections import deque
 
 import numpy as np
 
@@ -8,26 +10,70 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import IterableDataset, DataLoader, get_worker_info
 from torch.utils.tensorboard import SummaryWriter
 
 
-class TripletUniformPair(Dataset):
-    def __init__(self, num_item, user_list, pair):
+"""
+class EpochRandomSampler(Sampler):
+    def __init__(self, data_source, epoch=1):
+        self.data_source = data_source
+        self.epoch = epoch
+
+    def __iter__(self):
+        n = len(self.data_source)
+        return iter(torch.cat([torch.randperm(n)
+                               for _ in range(self.epoch)]).tolist())
+
+    def __len__(self):
+        return self.epoch * len(self.data_source)
+"""
+
+
+class TripletUniformPair(IterableDataset):
+    def __init__(self, num_item, user_list, pair, shuffle, num_epochs, batch_size):
         self.num_item = num_item
         self.user_list = user_list
         self.pair = pair
+        self.shuffle = shuffle
+        self.num_epochs = num_epochs
+        self.batch_size = batch_size
 
-    def __getitem__(self, idx):
+    def __iter__(self):
+        worker_info = get_worker_info()
+        # Shuffle per epoch
+        if worker_info is None:
+            self.example_size = self.num_epochs * len(self.pair)
+            self.example_index_queue = deque([])
+            self.iteration_size = self.example_size // self.batch_size * self.batch_size
+            self.index = 0
+        else:
+            raise NotImplementedError
+        return self
+
+    def __next__(self):
+        if self.index >= self.iteration_size:
+            raise StopIteration
+        # If `example_index_queue` is used up, replenish this list.
+        while len(self.example_index_queue) < self.batch_size:
+            index_list = list(range(len(self.pair)))
+            if self.shuffle:
+                random.shuffle(index_list)
+            self.example_index_queue.extend(index_list)
+        batch_index = [self.example_index_queue.popleft()
+                       for _ in range(self.batch_size)]
+        result = [self._example(i) for i in batch_index]
+        result = list(map(list, zip(*result)))
+        self.index += 1
+        return result
+
+    def _example(self, idx):
         u = self.pair[idx][0]
         i = self.pair[idx][1]
         j = np.random.randint(self.num_item)
         while j in self.user_list[u]:
             j = np.random.randint(self.num_item)
         return u, i, j
-
-    def __len__(self):
-        return len(self.pair)
 
 
 class BPR(nn.Module):
@@ -138,8 +184,10 @@ def main(args):
     print('Load complete')
 
     # Create dataset, model, optimizer
-    dataset = TripletUniformPair(item_size, train_user_list, train_pair)
-    loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=32)
+    dataset = TripletUniformPair(item_size, train_user_list, train_pair, True, args.n_epochs, args.batch_size)
+    #sampler = EpochRandomSampler(dataset, 20)
+    #loader = DataLoader(dataset, batch_size=args.batch_size, sampler=sampler, num_workers=16)
+    loader = DataLoader(dataset, num_workers=0)
     model = BPR(user_size, item_size, args.dim, args.weight_decay).cuda()
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
     writer = SummaryWriter()
@@ -147,37 +195,36 @@ def main(args):
     # Training
     smooth_loss = 0
     idx = 0
-    for _ in range(args.n_epochs):
-        for u, i, j in loader:
-            optimizer.zero_grad()
-            loss = model(u, i, j)
-            loss.backward()
-            optimizer.step()
-            writer.add_scalar('train/loss', loss, idx)
-            smooth_loss = smooth_loss*0.99 + loss*0.01
-            if idx % args.print_every == (args.print_every - 1):
-                print('loss: %.4f' % smooth_loss)
-                writer.add_histogram('user_gradnorm', model.W.grad[u, :].norm(dim=1))
-                writer.add_histogram('postivie_gradnorm', model.H.grad[i, :].norm(dim=1))
-                writer.add_histogram('negative_gradnorm', model.H.grad[j, :].norm(dim=1))
-            if idx % args.eval_every == (args.eval_every - 1):
-                plist, rlist = precision_and_recall_k(model.W.detach(),
-                                                      model.H.detach(),
-                                                      train_user_list,
-                                                      test_user_list,
-                                                      klist=[1, 5, 10])
-                print('P@1: %.4f, P@5: %.4f P@10: %.4f, R@1: %.4f, R@5: %.4f, R@10: %.4f' % (plist[0], plist[1], plist[2], rlist[0], rlist[1], rlist[2]))
-                writer.add_scalars('eval', {'P@1': plist[0],
-                                                      'P@5': plist[1],
-                                                      'P@10': plist[2]}, idx)
-                writer.add_scalars('eval', {'R@1': rlist[0],
-                                                   'R@5': rlist[1],
-                                                   'R@10': rlist[2]}, idx)
-            if idx % args.save_every == (args.save_every - 1):
-                dirname = os.path.dirname(os.path.abspath(args.model))
-                os.makedirs(dirname, exist_ok=True)
-                torch.save(model.state_dict(), args.model)
-            idx += 1
+    for u, i, j in loader:
+        optimizer.zero_grad()
+        loss = model(u, i, j)
+        loss.backward()
+        optimizer.step()
+        writer.add_scalar('train/loss', loss, idx)
+        smooth_loss = smooth_loss*0.99 + loss*0.01
+        if idx % args.print_every == (args.print_every - 1):
+            print('loss: %.4f' % smooth_loss)
+            writer.add_histogram('user_gradnorm', model.W.grad[u, :].norm(dim=1))
+            writer.add_histogram('postivie_gradnorm', model.H.grad[i, :].norm(dim=1))
+            writer.add_histogram('negative_gradnorm', model.H.grad[j, :].norm(dim=1))
+        if idx % args.eval_every == (args.eval_every - 1):
+            plist, rlist = precision_and_recall_k(model.W.detach(),
+                                                    model.H.detach(),
+                                                    train_user_list,
+                                                    test_user_list,
+                                                    klist=[1, 5, 10])
+            print('P@1: %.4f, P@5: %.4f P@10: %.4f, R@1: %.4f, R@5: %.4f, R@10: %.4f' % (plist[0], plist[1], plist[2], rlist[0], rlist[1], rlist[2]))
+            writer.add_scalars('eval', {'P@1': plist[0],
+                                                    'P@5': plist[1],
+                                                    'P@10': plist[2]}, idx)
+            writer.add_scalars('eval', {'R@1': rlist[0],
+                                                'R@5': rlist[1],
+                                                'R@10': rlist[2]}, idx)
+        if idx % args.save_every == (args.save_every - 1):
+            dirname = os.path.dirname(os.path.abspath(args.model))
+            os.makedirs(dirname, exist_ok=True)
+            torch.save(model.state_dict(), args.model)
+        idx += 1
 
 
 if __name__ == '__main__':
