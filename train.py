@@ -40,6 +40,16 @@ class BPR(nn.Module):
         self.weight_decay = weight_decay
 
     def forward(self, u, i, j):
+        """Return loss value.
+        
+        Args:
+            u(torch.LongTensor): tensor stored user indexes. [batch_size,]
+            i(torch.LongTensor): tensor stored item indexes which is prefered by user. [batch_size,]
+            j(torch.LongTensor): tensor stored item indexes which is not prefered by user. [batch_size,]
+        
+        Returns:
+            torch.FloatTensor
+        """
         u = self.W[u, :]
         i = self.H[i, :]
         j = self.H[j, :]
@@ -49,6 +59,20 @@ class BPR(nn.Module):
         log_prob = F.logsigmoid(x_uij).sum()
         regularization = self.weight_decay * (u.norm(dim=1).pow(2).sum() + i.norm(dim=1).pow(2).sum() + j.norm(dim=1).pow(2).sum())
         return -log_prob + regularization
+
+    def recommend(self, u):
+        """Return recommended item list given users.
+
+        Args:
+            u(torch.LongTensor): tensor stored user indexes. [batch_size,]
+
+        Returns:
+            pred(torch.LongTensor): recommended item list sorted by preference. [batch_size, item_size]
+        """
+        u = self.W[u, :]
+        x_ui = torch.mm(u, self.H.t())
+        pred = torch.argsort(x_ui, dim=1)
+        return pred
 
 
 def precision_and_recall_k(user_emb, item_emb, train_user_list, test_user_list, klist, batch=512):
