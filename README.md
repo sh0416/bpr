@@ -76,19 +76,16 @@ python train.py --help
 
 ## Implementation detail
 
-* I didn't use regularization coefficient for each embedding matrix. If you want
-to tune each coefficient, then you need to add regularization term inside the loss
-value.
-
 ## Result
 
 The evaluation benchmark for movielens 1m is the following table.
 I think more tuning will get better result, but this value is reasonably around the
 statistic.
+I got very weird statistic when I train MovieLens-1M. I think I have to check my function more rigorously.
 
 | Dataset       | Preprocess | P@1    | P@5    | P@10   | R@1    | R@5    | R@10   |
 |---------------|------------|--------|--------|--------|--------|--------|--------|
-| Movielens-1m  | Random     | 0.2421 | 0.2058 | 0.1821 | 0.0096 | 0.0392 | 0.0674 |
+| Movielens-1m  | Random     | 0.3881 | 0.2987 | 0.2683 | 0.0178 | 0.0616 | 0.1018 |
 | Movielens-1m  | Time-order | 0.1307 | 0.1133 | 0.1034 | 0.0052 | 0.0216 | 0.0388 |
 | Movielens-20m | Random     | 0.2359 | 0.1790 | 0.1529 | 0.0118 | 0.0395 | 0.0652 |
 | Movielens-20m | Time-order | 0.1070 | 0.0887 | 0.0809 | 0.0059 | 0.0237 | 0.0431 |
@@ -117,7 +114,31 @@ Q. Loss converge to 0.6931.
 A. Because weight decay is so strong that model cannot learn from dataset.
 Decrease the weight decay factor.
 
+## Laboratory (Experimental development)
+
+### Test driven development
+
+I use `unittest` framework to make my function reliable.
+The execution code for testing is `python test.py`.
+You can get some useful code snippets from `test.py`.
+
+### Brand new data structure `VariableShapeList`
+
+I am working for more elaborated approach to calculate evaluation metric.
+For now, I develop `VariableShapeList` which can handle list of tensors which has different length.
+Someone might said that it is equivalent with `PackedSequence` which is already implemented in pyTorch, but I can't use that data structure for evaluation metric.
+
+### Use IterableDataset for delivering fast data structure
+
+I figure out that the setup time for multiprocessing `DataLoader` is major bottleneck in my training script.
+Therefore, I refactor my dataset with `IterableDataset` and get 10x faster than existing implementation.
+*This implementation needs to be tested.*
+
+### Performance optimization
+
+The large batch size and speed performance optimization boost evaluation metric.
+I will updated all statistics for MovieLens-1M and MovieLens-20M.
+
 ## Contact
 
-If you have any problem during simulating this code, open issue or contact me
-by sending email to seonghyeon.drew@gmail.com
+If you have any problem or encounter mysterious things during simulating this code, **open issue** or contact me by sending email to seonghyeon.drew@gmail.com
