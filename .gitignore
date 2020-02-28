@@ -1,3 +1,12 @@
 data/
 preprocessed/
 output/
+.vscode/settings.json
+*.pyc
+*.pyd
+*.obj
+*.exp
+*.lib
+*.egg
+*.txt
+pytorch/vsl-extension/vsl_cpp.egg-info/PKG-INFO

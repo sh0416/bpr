@@ -117,6 +117,12 @@ Q. Loss converge to 0.6931.
 A. Because weight decay is so strong that model cannot learn from dataset.
 Decrease the weight decay factor.
 
+## Experimental laboratory
+
+I am working for more elaborated approach to calculate evaluation metric.
+For now, I develop `VariableShapeList` which can handle list of tensors which has different length.
+Someone might said that it is equivalent with `PackedSequence` which is already implemented in pyTorch, but I can't use that data structure for evaluation metric.
+
 ## Contact
 
 If you have any problem during simulating this code, open issue or contact me
