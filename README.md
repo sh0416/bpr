@@ -108,17 +108,17 @@ I got very weird statistic when I train MovieLens-1M. I think I have to check my
 
 #### MovieLens 1M
 
-| Random | Time-order |
-|--------|------------|
-|![](https://github.com/sh0416/bpr/blob/master/result/ml1m-loss.JPG)|![](https://github.com/sh0416/bpr/blob/master/result/ml1m-timeorder-loss.JPG)|
+| Dataset | Random | Time-order |
+|---------|--------|------------|
+| MovieLens-1M |![](https://github.com/sh0416/bpr/blob/master/result/ml1m-loss.JPG)|![](https://github.com/sh0416/bpr/blob/master/result/ml1m-timeorder-loss.JPG)|
 
 ### Evaluation metric curve
 
 #### MovieLens 1M
 
-| Random | Time-order |
-|--------|------------|
-|![](https://github.com/sh0416/bpr/blob/master/result/ml1m-eval.JPG)|![](https://github.com/sh0416/bpr/blob/master/result/ml1m-timeorder-eval.JPG)|
+| Dataset | Random | Time-order |
+|---------|--------|------------|
+| MovieLens-1M |![](https://github.com/sh0416/bpr/blob/master/result/ml1m-eval.JPG)|![](https://github.com/sh0416/bpr/blob/master/result/ml1m-timeorder-eval.JPG)|
 
 More information will get from the `result` directory.
 
