@@ -114,13 +114,31 @@ Q. Loss converge to 0.6931.
 A. Because weight decay is so strong that model cannot learn from dataset.
 Decrease the weight decay factor.
 
-## Experimental laboratory
+## Laboratory (Experimental development)
+
+### Test driven development
+
+I use `unittest` framework to make my function reliable.
+The execution code for testing is `python test.py`.
+You can get some useful code snippets from `test.py`.
+
+### Brand new data structure `VariableShapeList`
 
 I am working for more elaborated approach to calculate evaluation metric.
 For now, I develop `VariableShapeList` which can handle list of tensors which has different length.
 Someone might said that it is equivalent with `PackedSequence` which is already implemented in pyTorch, but I can't use that data structure for evaluation metric.
 
+### Use IterableDataset for delivering fast data structure
+
+I figure out that the setup time for multiprocessing `DataLoader` is major bottleneck in my training script.
+Therefore, I refactor my dataset with `IterableDataset` and get 10x faster than existing implementation.
+*This implementation needs to be tested.*
+
+### Performance optimization
+
+The large batch size and speed performance optimization boost evaluation metric.
+I will updated all statistics for MovieLens-1M and MovieLens-20M.
+
 ## Contact
 
-If you have any problem during simulating this code, open issue or contact me
-by sending email to seonghyeon.drew@gmail.com
+If you have any problem or encounter mysterious things during simulating this code, **open issue** or contact me by sending email to seonghyeon.drew@gmail.com

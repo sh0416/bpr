@@ -14,57 +14,46 @@ from torch.utils.data import IterableDataset, DataLoader, get_worker_info
 from torch.utils.tensorboard import SummaryWriter
 
 
-"""
-class EpochRandomSampler(Sampler):
-    def __init__(self, data_source, epoch=1):
-        self.data_source = data_source
-        self.epoch = epoch
-
-    def __iter__(self):
-        n = len(self.data_source)
-        return iter(torch.cat([torch.randperm(n)
-                               for _ in range(self.epoch)]).tolist())
-
-    def __len__(self):
-        return self.epoch * len(self.data_source)
-"""
-
-
 class TripletUniformPair(IterableDataset):
-    def __init__(self, num_item, user_list, pair, shuffle, num_epochs, batch_size):
+    def __init__(self, num_item, user_list, pair, shuffle, num_epochs):
         self.num_item = num_item
         self.user_list = user_list
         self.pair = pair
         self.shuffle = shuffle
         self.num_epochs = num_epochs
-        self.batch_size = batch_size
 
     def __iter__(self):
         worker_info = get_worker_info()
         # Shuffle per epoch
-        if worker_info is None:
-            self.example_size = self.num_epochs * len(self.pair)
-            self.example_index_queue = deque([])
-            self.iteration_size = self.example_size // self.batch_size * self.batch_size
-            self.index = 0
+        self.example_size = self.num_epochs * len(self.pair)
+        self.example_index_queue = deque([])
+        self.seed = 0
+        if worker_info is not None:
+            self.start_list_index = worker_info.id
+            self.num_workers = worker_info.num_workers
+            self.index = worker_info.id
         else:
-            raise NotImplementedError
+            self.start_list_index = None
+            self.num_workers = 1
+            self.index = 0
         return self
 
     def __next__(self):
-        if self.index >= self.iteration_size:
+        if self.index >= self.example_size:
             raise StopIteration
         # If `example_index_queue` is used up, replenish this list.
-        while len(self.example_index_queue) < self.batch_size:
+        while len(self.example_index_queue) == 0:
             index_list = list(range(len(self.pair)))
             if self.shuffle:
-                random.shuffle(index_list)
+                random.Random(self.seed).shuffle(index_list)
+                self.seed += 1
+            if self.start_list_index is not None:
+                index_list = index_list[self.start_list_index::self.num_workers]
+                # Calculate next start index
+                self.start_list_index = (self.start_list_index + (self.num_workers - (len(self.pair) % self.num_workers))) % self.num_workers
             self.example_index_queue.extend(index_list)
-        batch_index = [self.example_index_queue.popleft()
-                       for _ in range(self.batch_size)]
-        result = [self._example(i) for i in batch_index]
-        result = list(map(list, zip(*result)))
-        self.index += 1
+        result = self._example(self.example_index_queue.popleft())
+        self.index += self.num_workers
         return result
 
     def _example(self, idx):
@@ -184,10 +173,8 @@ def main(args):
     print('Load complete')
 
     # Create dataset, model, optimizer
-    dataset = TripletUniformPair(item_size, train_user_list, train_pair, True, args.n_epochs, args.batch_size)
-    #sampler = EpochRandomSampler(dataset, 20)
-    #loader = DataLoader(dataset, batch_size=args.batch_size, sampler=sampler, num_workers=16)
-    loader = DataLoader(dataset, num_workers=0)
+    dataset = TripletUniformPair(item_size, train_user_list, train_pair, True, args.n_epochs)
+    loader = DataLoader(dataset, batch_size=args.batch_size, num_workers=16)
     model = BPR(user_size, item_size, args.dim, args.weight_decay).cuda()
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
     writer = SummaryWriter()
@@ -204,9 +191,6 @@ def main(args):
         smooth_loss = smooth_loss*0.99 + loss*0.01
         if idx % args.print_every == (args.print_every - 1):
             print('loss: %.4f' % smooth_loss)
-            writer.add_histogram('user_gradnorm', model.W.grad[u, :].norm(dim=1))
-            writer.add_histogram('postivie_gradnorm', model.H.grad[i, :].norm(dim=1))
-            writer.add_histogram('negative_gradnorm', model.H.grad[j, :].norm(dim=1))
         if idx % args.eval_every == (args.eval_every - 1):
             plist, rlist = precision_and_recall_k(model.W.detach(),
                                                     model.H.detach(),
@@ -256,7 +240,7 @@ if __name__ == '__main__':
     # Training
     parser.add_argument('--n_epochs',
                         type=int,
-                        default=1000,
+                        default=500,
                         help="Number of epoch during training")
     parser.add_argument('--batch_size',
                         type=int,
