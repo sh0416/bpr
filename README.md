@@ -6,9 +6,23 @@ Other repositories also implement this model, but the evaluation takes longer ti
 So, I implement this model using pyTorch with GPU acceleration for evaluation.  
 Implementation detail will be explained in the following section.  
 
-## Set up environment
+## Environment
 
-You have to install the following package before executing this code.
+### Hardware
+
+* AMD Ryzen 7 3700X 8-Core Processor
+* Samsung DDR4 32GB
+* NVIDIA TitanXp
+
+### Software
+
+#### OS
+
+I use both Windows and Linux(Ubuntu).
+
+#### Python package
+
+You have to install the following packages before executing this code.
 
 * python==3.6
 * pytorch==1.3.1
@@ -86,7 +100,7 @@ I got very weird statistic when I train MovieLens-1M. I think I have to check my
 | Dataset       | Preprocess | P@1    | P@5    | P@10   | R@1    | R@5    | R@10   |
 |---------------|------------|--------|--------|--------|--------|--------|--------|
 | Movielens-1m  | Random     | 0.3881 | 0.2987 | 0.2683 | 0.0178 | 0.0616 | 0.1018 |
-| Movielens-1m  | Time-order | 0.1307 | 0.1133 | 0.1034 | 0.0052 | 0.0216 | 0.0388 |
+| Movielens-1m  | Time-order | 0.1588 | 0.1348 | 0.1297 | 0.0071 | 0.0294 | 0.0519 |
 | Movielens-20m | Random     | 0.2359 | 0.1790 | 0.1529 | 0.0118 | 0.0395 | 0.0652 |
 | Movielens-20m | Time-order | 0.1070 | 0.0887 | 0.0809 | 0.0059 | 0.0237 | 0.0431 |
 
@@ -94,13 +108,21 @@ I got very weird statistic when I train MovieLens-1M. I think I have to check my
 
 #### MovieLens 1M
 
+Random
 ![](https://github.com/sh0416/bpr/blob/master/result/ml1m-loss.JPG)
+
+Time-order
+![](https://github.com/sh0416/bpr/blob/master/result/ml1m-timeorder-loss.JPG)
 
 ### Evaluation metric curve
 
 #### MovieLens 1M
 
+Random
 ![](https://github.com/sh0416/bpr/blob/master/result/ml1m-eval.JPG)
+
+Time-order
+![](https://github.com/sh0416/bpr/blob/master/result/ml1m-timeorder-eval.JPG)
 
 More information will get from the `result` directory.
 
@@ -127,6 +149,11 @@ You can get some useful code snippets from `test.py`.
 I am working for more elaborated approach to calculate evaluation metric.
 For now, I develop `VariableShapeList` which can handle list of tensors which has different length.
 Someone might said that it is equivalent with `PackedSequence` which is already implemented in pyTorch, but I can't use that data structure for evaluation metric.
+Some operation is directly implemented by CPP function and will be implemented by CUDA kernel function.
+
+#### CPP Build tools (Optional)
+
+For Windows, Visual Studio Build tool is needed for CPP extension. Install it from [here](https://visualstudio.microsoft.com/vs/older-downloads/)
 
 ### Use IterableDataset for delivering fast data structure
 
