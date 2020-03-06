@@ -1,5 +1,6 @@
 Bayesian Personalized Ranking from Implicit Feedback
 ====================================================
+[![Build Status](https://travis-ci.com/sh0416/bpr.svg?branch=master)](https://travis-ci.com/sh0416/bpr)
 
 The repository implement the Bayesian Personalized Ranking using pyTorch ([https://arxiv.org/pdf/1205.2618](https://arxiv.org/pdf/1205.2618))  
 Other repositories also implement this model, but the evaluation takes longer time.  
@@ -132,13 +133,13 @@ Q. Loss converge to 0.6931.
 A. Because weight decay is so strong that model cannot learn from dataset.
 Decrease the weight decay factor.
 
+## Continuous integration (Travis CI)
+
+I use `pytest` framework to make my function reliable.
+The execution code for testing is `pytest`.
+You can get some useful code snippets from `tests` directory.
+
 ## Laboratory (Experimental development)
-
-### Test driven development
-
-I use `unittest` framework to make my function reliable.
-The execution code for testing is `python test.py`.
-You can get some useful code snippets from `test.py`.
 
 ### Brand new data structure `VariableShapeList`
 
