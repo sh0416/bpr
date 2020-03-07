@@ -125,19 +125,14 @@ More information will get from the `result` directory.
 
 ## FAQ
 
-Q. Loss doesn't decrease, why?
-A. I print the smoothing loss and the initial smoothing loss is 0, which cause
-this problem. Waiting just a moment, then loss will go down.
-
-Q. Loss converge to 0.6931.
-A. Because weight decay is so strong that model cannot learn from dataset.
-Decrease the weight decay factor.
 
 ## Continuous integration (Travis CI)
 
 I use `pytest` framework to make my function reliable.
 The execution code for testing is `pytest`.
 You can get some useful code snippets from `tests` directory.
+As I cannot find continuous integration tool which freely support gpu, I couldn't test CUDA code I implemented.
+So, for stable execution, do test manually by using `pytest` to check it works well in your environment.
 
 ## Laboratory (Experimental development)
 

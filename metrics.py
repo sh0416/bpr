@@ -53,10 +53,10 @@ def vsl_intersection(list1, list2):
     """
     # get `batch_size`
     assert list1.batch_size == list2.batch_size, "list1 and list2 have different batch size"
-    data, indexes = vsl_cpp.intersection(list1.data,
-                                         list1.indexes,
-                                         list2.data,
-                                         list2.indexes)
+    data, indexes = vsl_cpp.vsl_intersection(list1.data,
+                                             list2.indexes,
+                                             list2.data,
+                                             list2.indexes)
     return VariableShapeList(indexes, data)
     
 
