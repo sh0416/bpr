@@ -38,6 +38,9 @@ class VariableShapeList(object):
     def __getitem__(self, idx):
         return self.data[self.indexes[idx]:self.indexes[idx+1]]
     
+    def get_size_tensor(self):
+        return self.indexes[1:] - self.indexes[:-1]
+
 
 def vsl_intersection(list1, list2):
     """Calculate intersection VariableShapeList.
@@ -54,12 +57,46 @@ def vsl_intersection(list1, list2):
     # get `batch_size`
     assert list1.batch_size == list2.batch_size, "list1 and list2 have different batch size"
     data, indexes = vsl_cpp.vsl_intersection(list1.data,
-                                             list2.indexes,
+                                             list1.indexes,
                                              list2.data,
                                              list2.indexes)
     return VariableShapeList(indexes, data)
     
 
+def vsl_precision(pred, true):
+    """Calculate precision.
+    
+    Args:
+        pred (VariableShapeList): 
+        true (variableShapeList): 
+    Returns:
+        torch.FloatTensor [batch_size]
+    """
+    if not torch.all(pred.get_size_tensor()>0):
+        raise ZeroDivisionError("The denominator of precision could be zero")
+    intersection = vsl_intersection(pred, true)
+    intersection_size = intersection.get_size_tensor().float()
+    pred_size = pred.get_size_tensor().float()
+    return intersection_size / pred_size
+    
+    
+def vsl_recall(pred, true):
+    """Calculate recall.
+    
+    Args:
+        pred (VariableShapeList): 
+        true (variableShapeList): 
+    Returns:
+        torch.FloatTensor [batch_size]
+    """
+    if not torch.all(true.get_size_tensor()>0):
+        raise ZeroDivisionError("The denominator of precision could be zero")
+    intersection = vsl_intersection(pred, true)
+    intersection_size = intersection.get_size_tensor().float()
+    true_size = true.get_size_tensor().float()
+    return intersection_size / true_size
+    
+    
 def precision_and_recall_k(user_emb, item_emb, train_user_list, test_user_list, klist, batch=512):
     """Compute precision at k using GPU.
 
@@ -122,22 +159,6 @@ def accuracy(pred, true, total_size):
     raise NotImplemented
     
 
-def precision(pred, true):
-    """Calculate precision.
-    
-    Args:
-        pred (torch.LongTensor): [batch_size, prediction_length]
-        true (torch.LongTensor): [batch_size, true_length]
-    Returns:
-        torch.FloatTensor [batch_size]
-    """
-    raise NotImplemented
-    
-    
-def recall(pred, true):
-    raise NotImplemented
-    
-    
 def mean_average_precision(pred, true):
     raise NotImplemented
     
