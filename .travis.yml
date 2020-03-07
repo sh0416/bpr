@@ -8,9 +8,6 @@ install:
   - cd cpp
   - python setup.py install
   - cd ..
-  - cd cuda
-  - python setup.py install
-  - cd ..
   - cd ..
 script:
   - pytest
