@@ -3,6 +3,7 @@
 #include <iostream>
 #include <vector>
 
+
 std::vector<torch::Tensor> vsl_intersection(
     torch::Tensor data1,
     torch::Tensor indexes1,
@@ -52,5 +53,5 @@ std::vector<torch::Tensor> vsl_intersection(
 }
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
-  m.def("intersection", &vsl_intersection, "VSL intersection");
+  m.def("vsl_intersection", &vsl_intersection, "VSL intersection");
 }
