@@ -13,6 +13,8 @@ import torch.optim as optim
 from torch.utils.data import IterableDataset, DataLoader, get_worker_info
 from torch.utils.tensorboard import SummaryWriter
 
+from metrics import VariableShapeList, vsl_precision, vsl_recall
+
 
 class TripletUniformPair(IterableDataset):
     def __init__(self, num_item, user_list, pair, shuffle, num_epochs):
@@ -95,18 +97,20 @@ class BPR(nn.Module):
         regularization = self.weight_decay * (u.norm(dim=1).pow(2).sum() + i.norm(dim=1).pow(2).sum() + j.norm(dim=1).pow(2).sum())
         return -log_prob + regularization
 
-    def recommend(self, u):
+    def recommend(self, u, k):
         """Return recommended item list given users.
 
         Args:
             u(torch.LongTensor): tensor stored user indexes. [batch_size,]
+            k(int): recommend k items.
 
         Returns:
-            pred(torch.LongTensor): recommended item list sorted by preference. [batch_size, item_size]
+            pred(torch.LongTensor): recommended item list sorted by preference.
+                                    [batch_size, k]
         """
         u = self.W[u, :]
         x_ui = torch.mm(u, self.H.t())
-        pred = torch.argsort(x_ui, dim=1)
+        pred = torch.argsort(x_ui, dim=1, descending=True)[:, :k]
         return pred
 
 
@@ -129,11 +133,11 @@ def precision_and_recall_k(user_emb, item_emb, train_user_list, test_user_list, 
     result = None
     for i in range(0, user_emb.shape[0], batch):
         # Create already observed mask
-        mask = user_emb.new_ones([min([batch, user_emb.shape[0]-i]), item_emb.shape[0]])
+        mask = user_emb.new_ones([min([batch, user_emb.shape[0]-i]), item_emb.shape[0]], dtype=torch.float)
         for j in range(batch):
             if i+j >= user_emb.shape[0]:
                 break
-            mask[j].scatter_(dim=0, index=torch.tensor(list(train_user_list[i+j])).cuda(), value=torch.tensor(0.0).cuda())
+            mask[j].scatter_(dim=0, index=train_user_list[i+j].cuda(), value=torch.tensor(0.0).cuda())
         # Calculate prediction value
         cur_result = torch.mm(user_emb[i:i+min(batch, user_emb.shape[0]-i), :], item_emb.t())
         cur_result = torch.sigmoid(cur_result)
@@ -159,6 +163,25 @@ def precision_and_recall_k(user_emb, item_emb, train_user_list, test_user_list, 
     return precisions, recalls
 
 
+def evaluate_model(model, train_user_list, test_user_list, k=5):
+    precisions, recalls = [], []
+    for u_start in range(0, len(train_user_list), 512):
+        u_end = min([u_start+512, len(train_user_list)])
+        pred = model.recommend(torch.arange(u_start, u_end).cuda(), k=k).cpu()
+        train_true = VariableShapeList.from_tensors(train_user_list[u_start:u_end])
+        test_true = VariableShapeList.from_tensors(test_user_list[u_start:u_end])
+        #train_true = train_true.to(torch.device(torch.cuda.current_device()))
+        train_pred = [pred[i] for i in range(pred.shape[0])]
+        train_pred = VariableShapeList.from_tensors(train_pred)
+        precisions.append(vsl_precision(train_pred, train_true))
+        recalls.append(vsl_recall(train_pred, train_true))
+    precisions = torch.cat(precisions, dim=0)
+    recalls = torch.cat(recalls, dim=0)
+    precision = precisions.mean()
+    recall = recalls.mean()
+    return precision, recall
+
+
 def main(args):
     # Initialize seed
     np.random.seed(args.seed)
@@ -167,10 +190,16 @@ def main(args):
     # Load preprocess data
     with open(args.data, 'rb') as f:
         dataset = pickle.load(f)
-        user_size, item_size = dataset['user_size'], dataset['item_size']
-        train_user_list, test_user_list = dataset['train_user_list'], dataset['test_user_list']
+        user_size = dataset['user_size']
+        item_size = dataset['item_size']
+        train_user_list = dataset['train_user_list']
+        test_user_list = dataset['test_user_list']
         train_pair = dataset['train_pair']
     print('Load complete')
+
+    # Convert list into tensor
+    train_user_list = [torch.tensor(x, dtype=torch.long) for x in train_user_list]
+    test_user_list = [torch.tensor(x, dtype=torch.long) for x in test_user_list]
 
     # Create dataset, model, optimizer
     dataset = TripletUniformPair(item_size, train_user_list, train_pair, True, args.n_epochs)
@@ -179,6 +208,20 @@ def main(args):
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
     writer = SummaryWriter()
 
+    import datetime
+    start = datetime.datetime.now()
+    evaluate_model(model, train_user_list, test_user_list)
+    end = datetime.datetime.now()
+    print('New elapsed time: %s' % (end - start))
+    start = datetime.datetime.now()
+    plist, rlist = precision_and_recall_k(model.W.detach(),
+                                            model.H.detach(),
+                                            train_user_list,
+                                            test_user_list,
+                                            klist=[1, 5, 10])
+    end = datetime.datetime.now()
+    print('Old elapsed time: %s' % (end - start))
+    assert False
     # Training
     smooth_loss = 0
     idx = 0
@@ -198,6 +241,8 @@ def main(args):
                                                     test_user_list,
                                                     klist=[1, 5, 10])
             print('P@1: %.4f, P@5: %.4f P@10: %.4f, R@1: %.4f, R@5: %.4f, R@10: %.4f' % (plist[0], plist[1], plist[2], rlist[0], rlist[1], rlist[2]))
+            p, r = evaluate_model(model, train_user_list, test_user_list)
+            print('P@5: %.4f, R@5: %.4f' % (p, r))
             writer.add_scalars('eval', {'P@1': plist[0],
                                                     'P@5': plist[1],
                                                     'P@10': plist[2]}, idx)

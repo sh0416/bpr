@@ -1,3 +1,4 @@
+import random
 import torch
 import pytest
 from bpr.metrics import VariableShapeList, vsl_intersection, vsl_precision, vsl_recall
@@ -12,19 +13,19 @@ def test_create_variable_shape_list():
 
 
 def test_calculate_intersection():
-    pred1 = torch.tensor([1, 2, 3, 4, 5], dtype=torch.long)
-    pred2 = torch.tensor([1, 3, 5, 7, 9, 11], dtype=torch.long)
-    pred3 = torch.tensor([1, 3, 3, 4, 5], dtype=torch.long)
+    pred1 = torch.tensor([1, 2, 3, 4, 5], dtype=torch.long).cuda()
+    pred2 = torch.tensor([1, 3, 5, 7, 9, 11], dtype=torch.long).cuda()
+    pred3 = torch.tensor([1, 3, 3, 4, 5], dtype=torch.long).cuda()
     pred_list = VariableShapeList.from_tensors([pred1, pred2, pred3])
 
-    true1 = torch.tensor([3, 4, 5, 6, 7], dtype=torch.long)
-    true2 = torch.tensor([2, 4, 6, 8, 10], dtype=torch.long)
-    true3 = torch.tensor([3, 4, 5, 6, 7], dtype=torch.long)
+    true1 = torch.tensor([3, 4, 5, 6, 7], dtype=torch.long).cuda()
+    true2 = torch.tensor([2, 4, 6, 8, 10], dtype=torch.long).cuda()
+    true3 = torch.tensor([3, 4, 5, 6, 7], dtype=torch.long).cuda()
     true_list = VariableShapeList.from_tensors([true1, true2, true3])
 
-    inter1 = torch.tensor([3, 4, 5], dtype=torch.long)
-    inter2 = torch.tensor([], dtype=torch.long)
-    inter3 = torch.tensor([3, 3, 4, 5], dtype=torch.long)
+    inter1 = torch.tensor([3, 4, 5], dtype=torch.long).cuda()
+    inter2 = torch.tensor([], dtype=torch.long).cuda()
+    inter3 = torch.tensor([3, 3, 4, 5], dtype=torch.long).cuda()
     intersection_list = vsl_intersection(pred_list,
                                             true_list)
     assert torch.all(torch.eq(intersection_list[0], inter1))
@@ -39,7 +40,6 @@ def test_calculate_intersection2():
     intersection_list = vsl_intersection(pred_list,
                                             true_list)
     inter = torch.tensor([1, 2, 5], dtype=torch.long)
-    print(intersection_list[0], intersection_list.data)
     assert torch.all(torch.eq(intersection_list[0], inter))
 
 
@@ -94,7 +94,7 @@ def test_calculate_precision_edge():
     pred = VariableShapeList.from_tensors([pred])
     true = VariableShapeList.from_tensors([true])
 
-    with pytest.raises(ZeroDivisionError):
+    with pytest.warns(RuntimeWarning):
         precision = vsl_precision(pred, true)
 
 
@@ -110,7 +110,7 @@ def test_calculate_precision_edge_multiple():
     pred = VariableShapeList.from_tensors([pred1, pred2, pred3, pred4])
     true = VariableShapeList.from_tensors([true1, true2, true3, true4])
 
-    with pytest.raises(ZeroDivisionError):
+    with pytest.warns(RuntimeWarning):
         precision = vsl_precision(pred, true)
 
 
@@ -155,7 +155,6 @@ def test_calculate_recall_multiple():
     true = VariableShapeList.from_tensors([true1, true2, true3])
 
     recall = vsl_recall(pred, true)
-    print(recall)
     assert torch.allclose(recall, torch.tensor([0., 1., 0.8], dtype=torch.float32))
 
 
@@ -165,7 +164,7 @@ def test_calculate_recall_edge():
     pred = VariableShapeList.from_tensors([pred])
     true = VariableShapeList.from_tensors([true])
 
-    with pytest.raises(ZeroDivisionError):
+    with pytest.warns(RuntimeWarning):
         recall = vsl_recall(pred, true)
 
 
@@ -181,5 +180,26 @@ def test_calculate_recall_edge_multiple():
     pred = VariableShapeList.from_tensors([pred1, pred2, pred3, pred4])
     true = VariableShapeList.from_tensors([true1, true2, true3, true4])
 
-    with pytest.raises(ZeroDivisionError):
+    with pytest.warns(RuntimeWarning):
         recall = vsl_recall(pred, true)
+
+
+def create_random_vsl(length, max_value_per_example, max_length_per_example):
+    result = []
+    for i in range(length):
+        length = random.randint(0, max_length_per_example)
+        result.append(torch.randint(0, max_value_per_example, (length,)))
+    return VariableShapeList.from_tensors(result)
+
+
+def test_consistency_call():
+    pred = create_random_vsl(30, 100, 30) 
+    true = create_random_vsl(30, 100, 30) 
+    precision_cpu = vsl_precision(pred, true)
+    pred = pred.to('cuda:0')
+    true = true.to('cuda:0')
+    precision_cuda = vsl_precision(pred, true).to('cpu')
+    
+    assert torch.allclose(precision_cpu, precision_cuda)
+
+

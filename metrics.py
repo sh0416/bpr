@@ -1,11 +1,21 @@
-"""Utility functions for calculating evaluation metrics by accelerating gpu. Work In Progress"""
+"""Utility functions for calculating evaluation metrics by accelerating gpu."""
+import pprint
+import warnings
 import torch
 import vsl_cpp
+#import vsl_cuda
+from torch.utils.cpp_extension import load
+vsl_cuda = load(name="vsl_cuda", sources=['vsl-extension/cuda/vsl_cuda.cpp', 'vsl-extension/cuda/vsl_cuda_kernel.cu'], verbose=True)
 
+
+def shift_bit_length(x):
+    return 1<<(x-1).bit_length()
 
 class VariableShapeList(object):
     def __init__(self, indexes, data):
         super().__init__()
+        assert indexes.device == data.device, \
+                "`indexes` and `data` are stored in different storage"
         self.batch_size = indexes.shape[0] - 1
         self.indexes = indexes
         self.data = data
@@ -18,19 +28,22 @@ class VariableShapeList(object):
                                               For now, operation is only supported for one dimensional tensor.
         """
         assert len(tensors) > 0, "`tensors` is empty"
-        assert all([len(x.shape) == 1 for x in tensors]), "Some elements in `tensors` are not one dimensional"
+        assert all([len(x.shape) == 1 for x in tensors]), \
+                "Some elements in `tensors` are not one dimensional"
+        assert all([tensors[0].device==x.device for x in tensors]), \
+                "Some elements in `tensors` are in different storage"
         # Initialize `batch_size`
         batch_size = len(tensors)
         
         # Build up `indexes`
-        indexes = torch.empty((batch_size+1,), dtype=torch.long)
+        indexes = torch.empty((batch_size+1,), dtype=torch.long, device=tensors[0].device)
         indexes[0], tmp = 0, 0
         for idx, tensor in enumerate(tensors, start=1):
             tmp += tensor.numel()
             indexes[idx] = tmp
         
         # Build up `data`
-        data = torch.empty((indexes[batch_size],), dtype=torch.long)
+        data = torch.zeros((shift_bit_length(indexes[batch_size].item()),), dtype=torch.long, device=tensors[0].device)
         for idx, tensor in enumerate(tensors, start=0):
             data[indexes[idx]:indexes[idx+1]] = tensor
         return cls(indexes, data)
@@ -38,8 +51,21 @@ class VariableShapeList(object):
     def __getitem__(self, idx):
         return self.data[self.indexes[idx]:self.indexes[idx+1]]
     
+    def __str__(self):
+        return str([self.__getitem__(i) for i in range(self.batch_size)])
+
     def get_size_tensor(self):
         return self.indexes[1:] - self.indexes[:-1]
+
+    def to(self, device):
+        self.data = self.data.to(device)
+        self.indexes = self.indexes.to(device)
+        return self
+
+    @property
+    def is_cuda(self):
+        assert self.data.is_cuda == self.indexes.is_cuda
+        return self.data.is_cuda
 
 
 def vsl_intersection(list1, list2):
@@ -55,11 +81,22 @@ def vsl_intersection(list1, list2):
         VariableShapeList
     """
     # get `batch_size`
-    assert list1.batch_size == list2.batch_size, "list1 and list2 have different batch size"
-    data, indexes = vsl_cpp.vsl_intersection(list1.data,
-                                             list1.indexes,
-                                             list2.data,
-                                             list2.indexes)
+    assert list1.batch_size == list2.batch_size, \
+            "`list1` and `list2` have different batch size"
+    assert list1.is_cuda == list2.is_cuda, \
+            "`list1` and `list2` are stored in different storage"
+    if list1.is_cuda:
+        data, indexes, mask, sum_ = vsl_cuda.vsl_intersection(list1.data,
+                                                  list1.indexes,
+                                                  list2.data,
+                                                  list2.indexes)
+        #print('MASK', mask)
+        #print('SUM', sum_)
+    else:
+        data, indexes = vsl_cpp.vsl_intersection(list1.data,
+                                                 list1.indexes,
+                                                 list2.data,
+                                                 list2.indexes)
     return VariableShapeList(indexes, data)
     
 
@@ -72,11 +109,15 @@ def vsl_precision(pred, true):
     Returns:
         torch.FloatTensor [batch_size]
     """
+    pred_size = pred.get_size_tensor().float()
     if not torch.all(pred.get_size_tensor()>0):
-        raise ZeroDivisionError("The denominator of precision could be zero")
+        warnings.warn("At least one of the denominator of precision "
+                      "could be zero. Its nominator also must be zero,"
+                      "so I substitute the denominator of precision to one.",
+                      RuntimeWarning)
+        pred_size = torch.where(pred_size>0, pred_size, torch.ones_like(pred_size))
     intersection = vsl_intersection(pred, true)
     intersection_size = intersection.get_size_tensor().float()
-    pred_size = pred.get_size_tensor().float()
     return intersection_size / pred_size
     
     
@@ -89,11 +130,15 @@ def vsl_recall(pred, true):
     Returns:
         torch.FloatTensor [batch_size]
     """
-    if not torch.all(true.get_size_tensor()>0):
-        raise ZeroDivisionError("The denominator of precision could be zero")
+    true_size = true.get_size_tensor().float()
+    if not torch.all(true_size>0):
+        warnings.warn("At least one of the denominator of recall "
+                      "could be zero. Its nominator also must be zero,"
+                      "so I substitute the denominator of recall to one.",
+                      RuntimeWarning)
+        true_size = torch.where(true_size>0, true_size, torch.ones_like(true_size))
     intersection = vsl_intersection(pred, true)
     intersection_size = intersection.get_size_tensor().float()
-    true_size = true.get_size_tensor().float()
     return intersection_size / true_size
     
     
