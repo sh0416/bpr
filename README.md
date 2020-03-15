@@ -1,14 +1,29 @@
 Bayesian Personalized Ranking from Implicit Feedback
 ====================================================
+[![Build Status](https://travis-ci.com/sh0416/bpr.svg?branch=master)](https://travis-ci.com/sh0416/bpr)
 
 The repository implement the Bayesian Personalized Ranking using pyTorch ([https://arxiv.org/pdf/1205.2618](https://arxiv.org/pdf/1205.2618))  
 Other repositories also implement this model, but the evaluation takes longer time.  
 So, I implement this model using pyTorch with GPU acceleration for evaluation.  
 Implementation detail will be explained in the following section.  
 
-## Set up environment
+## Environment
 
-You have to install the following package before executing this code.
+### Hardware
+
+* AMD Ryzen 7 3700X 8-Core Processor
+* Samsung DDR4 32GB
+* NVIDIA TitanXp
+
+### Software
+
+#### OS
+
+I use both Windows and Linux(Ubuntu).
+
+#### Python package
+
+You have to install the following packages before executing this code.
 
 * python==3.6
 * pytorch==1.3.1
@@ -76,20 +91,17 @@ python train.py --help
 
 ## Implementation detail
 
-* I didn't use regularization coefficient for each embedding matrix. If you want
-to tune each coefficient, then you need to add regularization term inside the loss
-value.
-
 ## Result
 
 The evaluation benchmark for movielens 1m is the following table.
 I think more tuning will get better result, but this value is reasonably around the
 statistic.
+I got very weird statistic when I train MovieLens-1M. I think I have to check my function more rigorously.
 
 | Dataset       | Preprocess | P@1    | P@5    | P@10   | R@1    | R@5    | R@10   |
 |---------------|------------|--------|--------|--------|--------|--------|--------|
-| Movielens-1m  | Random     | 0.2421 | 0.2058 | 0.1821 | 0.0096 | 0.0392 | 0.0674 |
-| Movielens-1m  | Time-order | 0.1307 | 0.1133 | 0.1034 | 0.0052 | 0.0216 | 0.0388 |
+| Movielens-1m  | Random     | 0.3881 | 0.2987 | 0.2683 | 0.0178 | 0.0616 | 0.1018 |
+| Movielens-1m  | Time-order | 0.1588 | 0.1348 | 0.1297 | 0.0071 | 0.0294 | 0.0519 |
 | Movielens-20m | Random     | 0.2359 | 0.1790 | 0.1529 | 0.0118 | 0.0395 | 0.0652 |
 | Movielens-20m | Time-order | 0.1070 | 0.0887 | 0.0809 | 0.0059 | 0.0237 | 0.0431 |
 
@@ -97,13 +109,17 @@ statistic.
 
 #### MovieLens 1M
 
-![](https://github.com/sh0416/bpr/blob/master/result/ml1m-loss.JPG)
+| Dataset | Random | Time-order |
+|---------|--------|------------|
+| MovieLens-1M |![](https://github.com/sh0416/bpr/blob/master/result/ml1m-loss.JPG)|![](https://github.com/sh0416/bpr/blob/master/result/ml1m-timeorder-loss.JPG)|
 
 ### Evaluation metric curve
 
 #### MovieLens 1M
 
-![](https://github.com/sh0416/bpr/blob/master/result/ml1m-eval.JPG)
+| Dataset | Random | Time-order |
+|---------|--------|------------|
+| MovieLens-1M |![](https://github.com/sh0416/bpr/blob/master/result/ml1m-eval.JPG)|![](https://github.com/sh0416/bpr/blob/master/result/ml1m-timeorder-eval.JPG)|
 
 More information will get from the `result` directory.
 
@@ -117,7 +133,36 @@ Q. Loss converge to 0.6931.
 A. Because weight decay is so strong that model cannot learn from dataset.
 Decrease the weight decay factor.
 
+## Continuous integration (Travis CI)
+
+I use `pytest` framework to make my function reliable.
+The execution code for testing is `pytest`.
+You can get some useful code snippets from `tests` directory.
+
+## Laboratory (Experimental development)
+
+### Brand new data structure `VariableShapeList`
+
+I am working for more elaborated approach to calculate evaluation metric.
+For now, I develop `VariableShapeList` which can handle list of tensors which has different length.
+Someone might said that it is equivalent with `PackedSequence` which is already implemented in pyTorch, but I can't use that data structure for evaluation metric.
+Some operation is directly implemented by CPP function and will be implemented by CUDA kernel function.
+
+#### CPP Build tools (Optional)
+
+For Windows, Visual Studio Build tool is needed for CPP extension. Install it from [here](https://visualstudio.microsoft.com/vs/older-downloads/)
+
+### Use IterableDataset for delivering fast data structure
+
+I figure out that the setup time for multiprocessing `DataLoader` is major bottleneck in my training script.
+Therefore, I refactor my dataset with `IterableDataset` and get 10x faster than existing implementation.
+*This implementation needs to be tested.*
+
+### Performance optimization
+
+The large batch size and speed performance optimization boost evaluation metric.
+I will updated all statistics for MovieLens-1M and MovieLens-20M.
+
 ## Contact
 
-If you have any problem during simulating this code, open issue or contact me
-by sending email to seonghyeon.drew@gmail.com
+If you have any problem or encounter mysterious things during simulating this code, **open issue** or contact me by sending email to seonghyeon.drew@gmail.com

@@ -1,34 +1,65 @@
 """Utility functions for calculating evaluation metrics by accelerating gpu. Work In Progress"""
 import torch
+import vsl_cpp
 
-class VariableShapeLists(object):
-    def __init__(self, lists):
+
+class VariableShapeList(object):
+    def __init__(self, indexes, data):
+        super().__init__()
+        self.batch_size = indexes.shape[0] - 1
+        self.indexes = indexes
+        self.data = data
+
+    @classmethod
+    def from_tensors(cls, tensors):
         """
         Args:
-            lists (list(torch.LongTensor)): list of tensors which have different shape.
+            tensors (list(torch.LongTensor)): list of tensors which have different shape.
+                                              For now, operation is only supported for one dimensional tensor.
         """
-        super().__init__()
+        assert len(tensors) > 0, "`tensors` is empty"
+        assert all([len(x.shape) == 1 for x in tensors]), "Some elements in `tensors` are not one dimensional"
         # Initialize `batch_size`
-        self.batch_size = len(lists)
+        batch_size = len(tensors)
         
-        # Build up `shape`
-        self.shapes = [x.shape for x in lists]
-        
-        # Build up `indice`
-        self.indices = torch.empty((self.batch_size+1,), dtype=torch.long)
-        self.indices[0], tmp = 0, 0
-        for idx, list in enumerate(lists, start=1):
-            tmp += list.numel()
-            self.indices[idx] = tmp
+        # Build up `indexes`
+        indexes = torch.empty((batch_size+1,), dtype=torch.long)
+        indexes[0], tmp = 0, 0
+        for idx, tensor in enumerate(tensors, start=1):
+            tmp += tensor.numel()
+            indexes[idx] = tmp
         
         # Build up `data`
-        self.data = torch.empty((self.indices[self.batch_size],))
-        for idx, list in enumerate(lists, start=0):
-            self.data[self.indice[idx]:self.indice[idx+1]] = list
-            
-    def get(self, idx):
-        return self.data[self.indice[idx]:self.indice[idx+1]]
+        data = torch.empty((indexes[batch_size],), dtype=torch.long)
+        for idx, tensor in enumerate(tensors, start=0):
+            data[indexes[idx]:indexes[idx+1]] = tensor
+        return cls(indexes, data)
+
+    def __getitem__(self, idx):
+        return self.data[self.indexes[idx]:self.indexes[idx+1]]
     
+
+def vsl_intersection(list1, list2):
+    """Calculate intersection VariableShapeList.
+    For the first, we doesn't care about the duplicated item in the list.
+    So, you must check whether the element in the list is not duplicated.
+    
+    Args:
+        list1 (VariableShapeList): 
+        list2 (VariableShapeList):
+        
+    Returns:
+        VariableShapeList
+    """
+    # get `batch_size`
+    assert list1.batch_size == list2.batch_size, "list1 and list2 have different batch size"
+    data, indexes = vsl_cpp.intersection(list1.data,
+                                         list1.indexes,
+                                         list2.data,
+                                         list2.indexes)
+    return VariableShapeList(indexes, data)
+    
+
 def precision_and_recall_k(user_emb, item_emb, train_user_list, test_user_list, klist, batch=512):
     """Compute precision at k using GPU.
 
@@ -78,23 +109,6 @@ def precision_and_recall_k(user_emb, item_emb, train_user_list, test_user_list, 
     return precisions, recalls
 
 
-def calculate_correct_mask(pred, true):
-    """Calculate correct mask.
-    
-    Args:
-        pred (VariableShapeLists):
-        true (VariableShapeLists):
-        
-    Returns:
-        (VariableShapeLists, VariableShapeLists) the element in the list is torch.BooleanTensor
-    """
-    # Get `batch_size`
-    assert pred.batch_size == true.batch_size, "pred and true have different batch size"
-    pred
-    # create mask matrix
-    mask = torch.zeros(pred.batch_size, 
-    
-
 def accuracy(pred, true, total_size):
     """Calculate accuracy.
     
@@ -105,7 +119,6 @@ def accuracy(pred, true, total_size):
     Returns:
         torch.FloatTensor [batch_size]
     """
-    correct_mask = 
     raise NotImplemented
     
 
