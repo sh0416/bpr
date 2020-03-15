@@ -149,11 +149,11 @@ def precision_and_recall_k(user_emb, item_emb, train_user_list, test_user_list, 
     for k in klist:
         precision, recall = 0, 0
         for i in range(user_emb.shape[0]):
-            test = test_user_list[i]
+            test = set(test_user_list[i])
             pred = set(result[i, :k].numpy().tolist())
             val = len(test & pred)
-            precision += val / min([k, len(test)])
-            recall += val / len(test)
+            precision += val / max([min([k, len(test)]), 1])
+            recall += val / max([len(test), 1])
         precisions.append(precision / user_emb.shape[0])
         recalls.append(recall / user_emb.shape[0])
     return precisions, recalls

@@ -56,6 +56,7 @@ It **randomly** split the whole dataset into two parts, training data and test d
 ```bash
 python preprocess.py --dataset ml-1m --data_dir $data_dir --output_data preprocessed/ml-1m.pickle
 python preprocess.py --dataset ml-20m --data_dir $data_dir --output_data preprocessed/ml-20m.pickle
+python preprocess.py --dataset amazon-beauty --data_dir $data_dir --output_data preprocessed/amazon-beauty.pickle
 ```
 
 If you want to split training data and test data with time order, then execute the following command line.

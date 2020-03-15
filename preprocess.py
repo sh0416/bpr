@@ -1,6 +1,10 @@
 import os
+import gzip
+import json
+import math
 import random
 import pickle
+import pprint
 import argparse
 
 import numpy as np
@@ -9,6 +13,10 @@ import pandas as pd
 
 class DatasetLoader(object):
     def load(self):
+        """Minimum condition for dataset:
+          * All users must have at least one item record.
+          * All items must have at least one user record.
+        """
         raise NotImplementedError
 
 
@@ -37,6 +45,31 @@ class MovieLens20M(DatasetLoader):
                          names=['user', 'item', 'rate', 'time'],
                          usecols=['user', 'item', 'time'],
                          skiprows=1)
+        return df
+
+
+class AmazonBeauty(DatasetLoader):
+    def __init__(self, data_dir, file_name='All_Beauty.json.gz'):
+        self.fpath = os.path.join(data_dir, file_name)
+
+    def load(self):
+        raw_list = []
+        with gzip.open(self.fpath) as f:
+            for idx, line in enumerate(f):
+                raw_data = json.loads(line)
+                raw_list.append({'user': raw_data['reviewerID'],
+                                 'item': raw_data['asin'],
+                                 'rate': raw_data['overall'],
+                                 'time': raw_data['unixReviewTime']})
+        df = pd.DataFrame(raw_list)
+        print('Check if any column has null value')
+        print(df.isnull().any())
+        print('Total user number: %d' % df['user'].nunique())
+        print('Total item number: %d' % df['item'].nunique())
+        print('The number of unique item per user')
+        print(df.groupby('user')['item'].nunique().value_counts())
+        print('The number of unique user per item')
+        print(df.groupby('item')['user'].nunique().value_counts())
         return df
 
 
@@ -83,7 +116,7 @@ def convert_unique_idx(df, column_name):
     df[column_name] = df[column_name].astype('int')
     assert df[column_name].min() == 0
     assert df[column_name].max() == len(column_dict) - 1
-    return df
+    return df, column_dict
 
 
 def create_user_list(df, user_size):
@@ -93,29 +126,34 @@ def create_user_list(df, user_size):
     return user_list
 
 
-def split_train_test(user_list, test_size=0.2, time_order=False):
-    train_user_list = [None] * len(user_list)
-    test_user_list = [None] * len(user_list)
-    for user, item_list in enumerate(user_list):
-        if time_order:
+def split_train_test(df, user_size, test_size=0.2, time_order=False):
+    """Split a dataset into `train_user_list` and `test_user_list`.
+    Because it needs `user_list` for splitting dataset as `time_order` is set,
+    Returning `user_list` data structure will be a good choice."""
+    # TODO: Handle duplicated items
+    if not time_order:
+        test_idx = np.random.choice(len(df), size=int(len(df)*test_size))
+        train_idx = list(set(range(len(df))) - set(test_idx))
+        test_df = df.loc[test_idx].reset_index(drop=True)
+        train_df = df.loc[train_idx].reset_index(drop=True)
+        test_user_list = create_user_list(test_df, user_size)
+        train_user_list = create_user_list(train_df, user_size)
+    else:
+        total_user_list = create_user_list(df, user_size)
+        train_user_list = [None] * len(user_list)
+        test_user_list = [None] * len(user_list)
+        for user, item_list in enumerate(total_user_list):
             # Choose latest item
-            item_list = sorted(item_list, key=lambda x: x[0], reverse=True)
-        else:
-            # Random shuffle
-            random.shuffle(item_list)
-        # Remove time
-        item_list = list(map(lambda x: x[1], item_list))
-        # TODO: Handle duplicated items
-        # Split item
-        train_item = item_list[int(len(item_list)*test_size):]
-        test_item = item_list[:int(len(item_list)*test_size)]
-        # Remove time
-        train_item = set(train_item)
-        test_item = set(test_item)
-
-        assert len(test_item) > 0, "No test item for user %d" % user
-        train_user_list[user] = train_item
-        test_user_list[user] = test_item
+            item_list = sorted(item_list, key=lambda x: x[0])
+            # Split item
+            test_item = item_list[math.ceil(len(item_list)*(1-test_size)):]
+            train_item = item_list[:math.ceil(len(item_list)*(1-test_size))]
+            # Register to each user list
+            test_user_list[user] = test_item
+            train_user_list[user] = train_item
+    # Remove time
+    test_user_list = [list(map(lambda x: x[1], l)) for l in test_user_list]
+    train_user_list = [list(map(lambda x: x[1], l)) for l in train_user_list]
     return train_user_list, test_user_list
 
 
@@ -131,19 +169,19 @@ def main(args):
         df = MovieLens1M(args.data_dir).load()
     elif args.dataset == 'ml-20m':
         df = MovieLens20M(args.data_dir).load()
-    elif args.dataset == 'gowalla':
-        df = Gowalla(args.data_dir).load()
+    elif args.dataset == 'amazon-beauty':
+        df = AmazonBeauty(args.data_dir).load()
     else:
         raise NotImplementedError
-    df = convert_unique_idx(df, 'user')
-    df = convert_unique_idx(df, 'item')
+    df, user_mapping = convert_unique_idx(df, 'user')
+    df, item_mapping = convert_unique_idx(df, 'item')
     print('Complete assigning unique index to user and item')
 
     user_size = len(df['user'].unique())
     item_size = len(df['item'].unique())
 
-    total_user_list = create_user_list(df, user_size)
-    train_user_list, test_user_list = split_train_test(total_user_list,
+    train_user_list, test_user_list = split_train_test(df,
+                                                       user_size,
                                                        test_size=args.test_size,
                                                        time_order=args.time_order)
     print('Complete spliting items for training and testing')
@@ -152,6 +190,7 @@ def main(args):
     print('Complete creating pair')
 
     dataset = {'user_size': user_size, 'item_size': item_size, 
+               'user_mapping': user_mapping, 'item_mapping': item_mapping,
                'train_user_list': train_user_list, 'test_user_list': test_user_list,
                'train_pair': train_pair}
     dirname = os.path.dirname(os.path.abspath(args.output_data))
@@ -164,7 +203,7 @@ if __name__ == '__main__':
     # Parse argument
     parser = argparse.ArgumentParser()
     parser.add_argument('--dataset',
-                        choices=['ml-1m', 'ml-20m', 'gowalla'])
+                        choices=['ml-1m', 'ml-20m', 'amazon-beauty', 'gowalla'])
     parser.add_argument('--data_dir',
                         type=str,
                         default=os.path.join('data', 'ml-1m'),
