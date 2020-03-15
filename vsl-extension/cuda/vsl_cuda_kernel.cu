@@ -5,6 +5,9 @@
 
 #include <iostream>
 #include <vector>
+#define NUM_BANKS 16
+#define LOG_NUM_BANKS 4
+#define CONFLICT_FREE_OFFSET(n) ((n) >> NUM_BANKS + (n) >> (2 * LOG_NUM_BANKS)) 
 
 
 template <typename scalar_t>
@@ -19,46 +22,25 @@ __global__ void vsl_mask(
     for(int data1_idx=idx;
             data1_idx<data1.size(0);
             data1_idx+=gridDim.x*blockDim.x) {
-        int indexes_idx;
+        int indexes_idx = -1;
         for(int j=0; j<indexes1.size(0)-1; j++)
             if(indexes1[j]<=data1_idx && data1_idx<indexes1[j+1]) {
                 indexes_idx = j;
                 break;
             }
-        for(int data2_idx=indexes2[indexes_idx];
-                data2_idx<indexes2[indexes_idx+1];
-                data2_idx++) {
-            if(data1[data1_idx] == data2[data2_idx]) {
-                mask[data1_idx] = 1;
-                break;
+        if (0<=indexes_idx && indexes_idx<indexes1.size(0)-1)
+            for(int data2_idx=indexes2[indexes_idx];
+                    data2_idx<indexes2[indexes_idx+1];
+                    data2_idx++) {
+                if(data1[data1_idx] == data2[data2_idx]) {
+                    mask[data1_idx] = 1;
+                    break;
+                }
             }
-        }
     }
 }
 
-/*
-__global__ void scan(float *g_odata, float *g_idata, int n) {   
-	extern __shared__ float temp[]; // allocated on invocation    
-	int thid = threadIdx.x;
-    int pout = 0, pin = 1;   // Load input into shared memory.    
-							// This is exclusive scan, so shift right by one    
-				// and set first element to 0   
-	temp[pout*n + thid] = (thid > 0) ? g_idata[thid-1] : 0;   
-	__syncthreads();   
-	for (int offset = 1; offset < n; offset *= 2)   {     
-		pout = 1 - pout; // swap double buffer indices     
-		pin = 1 - pout;     
-		if (thid >= offset)       
-			temp[pout*n+thid] += temp[pin*n+thid - offset];     
-		else       
-			temp[pout*n+thid] = temp[pin*n+thid];     
-		__syncthreads();   
-	}   
-	g_odata[thid] = temp[pout*n+thid]; // write output 
-}
-*/
 
-/*
 template <typename scalar_t>
 __global__ void prefix_scan(
         torch::PackedTensorAccessor<scalar_t,1,torch::RestrictPtrTraits,size_t> in,
@@ -67,37 +49,47 @@ __global__ void prefix_scan(
     extern __shared__ scalar_t temp[2048];
     int thid = threadIdx.x;
     int offset = 1;
-    temp[2*thid] = in[2*thid];
-    temp[2*thid+1] = in[2*thid+1];
+    
+    int ai = thid;
+    int bi = thid + (in.size(0)/2);
+    int bankOffsetA = CONFLICT_FREE_OFFSET(ai);
+    int bankOffsetB = CONFLICT_FREE_OFFSET(bi);
+    temp[ai + bankOffsetA] = in[ai];
+    temp[bi + bankOffsetB] = in[bi];
+
     for (int d=in.size(0)>>1; d>0; d>>=1) {
         __syncthreads();
         if (thid < d) {
             int ai = offset * (2*thid + 1) - 1;
             int bi = offset * (2*thid + 2) - 1;
+            ai += CONFLICT_FREE_OFFSET(ai);
+            bi += CONFLICT_FREE_OFFSET(bi);
             temp[bi] += temp[ai];
         }
         offset *= 2;
     }
     if (thid == 0)
-        temp[in.size(0) - 1] = 0;
+        temp[in.size(0) - 1 + CONFLICT_FREE_OFFSET(in.size(0) - 1)] = 0;
     for (int d = 1; d<in.size(0); d*=2) {
         offset >>= 1;
         __syncthreads();
         if (thid < d) {
             int ai = offset * (2*thid + 1) - 1;
             int bi = offset * (2*thid + 2) - 1;
+            ai += CONFLICT_FREE_OFFSET(ai);
+            bi += CONFLICT_FREE_OFFSET(bi);
             scalar_t t = temp[ai];
             temp[ai] = temp[bi];
             temp[bi] += t;
         }
     }
     __syncthreads();
-    out[2*thid] = temp[2*thid];
-	out[2*thid+1] = temp[2*thid+1];
+    out[ai + bankOffsetA] = temp[ai + bankOffsetA];
+	out[bi + bankOffsetB] = temp[bi + bankOffsetB];
 }
-*/
 
 
+/*
 template <typename scalar_t>
 __global__ void prefix_scan(
     torch::PackedTensorAccessor<scalar_t,1,torch::RestrictPtrTraits,size_t> in,
@@ -109,6 +101,7 @@ __global__ void prefix_scan(
 		out[i] = val;
 	}
 }
+*/
 
 
 template <typename scalar_t>
