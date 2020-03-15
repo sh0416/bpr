@@ -11,3 +11,7 @@ output/
 *.egg
 *.txt
 pytorch/vsl-extension/vsl_cpp.egg-info/PKG-INFO
+vsl-extension/cpp/vsl_cpp.egg-info/PKG-INFO
+vsl-extension/cuda/vsl_cuda.egg-info/PKG-INFO
+*.so
+*.o
