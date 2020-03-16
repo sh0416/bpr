@@ -36,16 +36,13 @@ class VariableShapeList(object):
         batch_size = len(tensors)
         
         # Build up `indexes`
-        indexes = torch.empty((batch_size+1,), dtype=torch.long, device=tensors[0].device)
-        indexes[0], tmp = 0, 0
-        for idx, tensor in enumerate(tensors, start=1):
-            tmp += tensor.numel()
-            indexes[idx] = tmp
+        indexes = torch.tensor([0]+[x.numel() for x in tensors], dtype=torch.long, device=tensors[0].device)
+        indexes = torch.cumsum(indexes, dim=0)
         
         # Build up `data`
-        data = torch.zeros((shift_bit_length(indexes[batch_size].item()),), dtype=torch.long, device=tensors[0].device)
-        for idx, tensor in enumerate(tensors, start=0):
-            data[indexes[idx]:indexes[idx+1]] = tensor
+        data_raw = torch.cat(tensors, dim=0)
+        data = torch.zeros((shift_bit_length(data_raw.shape[0]),), dtype=torch.long, device=tensors[0].device)
+        data[:data_raw.shape[0]] = data_raw
         return cls(indexes, data)
 
     def __getitem__(self, idx):
@@ -90,8 +87,13 @@ def vsl_intersection(list1, list2):
                                                   list1.indexes,
                                                   list2.data,
                                                   list2.indexes)
-        #print('MASK', mask)
-        #print('SUM', sum_)
+        """
+        print(list1.data.shape[0])
+        for i in range(mask.shape[0]-1):
+            print('(%d, %d, %d)' % (i, sum_[i], mask[i]), end='\t')
+            assert sum_[i+1] - sum_[i] == mask[i], str(i)
+        """
+
     else:
         data, indexes = vsl_cpp.vsl_intersection(list1.data,
                                                  list1.indexes,

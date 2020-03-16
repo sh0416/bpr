@@ -110,7 +110,7 @@ class BPR(nn.Module):
         """
         u = self.W[u, :]
         x_ui = torch.mm(u, self.H.t())
-        pred = torch.argsort(x_ui, dim=1, descending=True)[:, :k]
+        _, pred = torch.topk(x_ui, dim=1, k=k)
         return pred
 
 
@@ -131,6 +131,8 @@ def precision_and_recall_k(user_emb, item_emb, train_user_list, test_user_list, 
 
     # Compute all pair of training and test record
     result = None
+    import datetime
+    start = datetime.datetime.now()
     for i in range(0, user_emb.shape[0], batch):
         # Create already observed mask
         mask = user_emb.new_ones([min([batch, user_emb.shape[0]-i]), item_emb.shape[0]], dtype=torch.float)
@@ -146,7 +148,8 @@ def precision_and_recall_k(user_emb, item_emb, train_user_list, test_user_list, 
         cur_result = torch.mul(mask, cur_result)
         _, cur_result = torch.topk(cur_result, k=max_k, dim=1)
         result = cur_result if result is None else torch.cat((result, cur_result), dim=0)
-
+    end = datetime.datetime.now()
+    print('%s' % (end-start))
     result = result.cpu()
     # Sort indice and get test_pred_topk
     precisions, recalls = [], []
@@ -165,20 +168,30 @@ def precision_and_recall_k(user_emb, item_emb, train_user_list, test_user_list, 
 
 def evaluate_model(model, train_user_list, test_user_list, k=5):
     precisions, recalls = [], []
-    for u_start in range(0, len(train_user_list), 512):
-        u_end = min([u_start+512, len(train_user_list)])
-        pred = model.recommend(torch.arange(u_start, u_end).cuda(), k=k).cpu()
-        train_true = VariableShapeList.from_tensors(train_user_list[u_start:u_end])
-        test_true = VariableShapeList.from_tensors(test_user_list[u_start:u_end])
-        #train_true = train_true.to(torch.device(torch.cuda.current_device()))
-        train_pred = [pred[i] for i in range(pred.shape[0])]
-        train_pred = VariableShapeList.from_tensors(train_pred)
-        precisions.append(vsl_precision(train_pred, train_true))
-        recalls.append(vsl_recall(train_pred, train_true))
-    precisions = torch.cat(precisions, dim=0)
-    recalls = torch.cat(recalls, dim=0)
-    precision = precisions.mean()
-    recall = recalls.mean()
+    pred = []
+    with torch.no_grad():
+        import datetime
+        start = datetime.datetime.now()
+        for u_start in range(0, len(train_user_list), 512):
+            u_end = min([u_start+512, len(train_user_list)])
+            pred.append(model.recommend(torch.arange(u_start, u_end), k=k))
+        pred = torch.cat(pred, dim=0)
+        pred = [pred[i] for i in range(pred.shape[0])]
+        end = datetime.datetime.now()
+        print('%s' % (end - start))
+        pred = VariableShapeList.from_tensors(pred)
+        train_true = VariableShapeList.from_tensors(train_user_list).to('cuda:0')
+        test_true = VariableShapeList.from_tensors(test_user_list).to('cuda:0')
+        end2 = datetime.datetime.now()
+        print('%s' % (end2- end))
+        precisions = vsl_precision(pred, train_true)
+        recalls = vsl_recall(pred, train_true)
+        #precisions.append(vsl_precision(pred, train_true))
+        #recalls.append(vsl_recall(pred, train_true))
+        #precisions = torch.cat(precisions, dim=0)
+        #recalls = torch.cat(recalls, dim=0)
+        precision = precisions.mean()
+        recall = recalls.mean()
     return precision, recall
 
 

@@ -203,3 +203,13 @@ def test_consistency_call():
     assert torch.allclose(precision_cpu, precision_cuda)
 
 
+def test_consistency_call_large():
+    pred = create_random_vsl(200, 100, 30) 
+    true = create_random_vsl(200, 100, 30) 
+    precision_cpu = vsl_precision(pred, true)
+    pred = pred.to('cuda:0')
+    true = true.to('cuda:0')
+    precision_cuda = vsl_precision(pred, true).to('cpu')
+    
+    assert torch.allclose(precision_cpu, precision_cuda)
+
