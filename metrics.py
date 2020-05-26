@@ -1,6 +1,9 @@
 """Utility functions for calculating evaluation metrics by accelerating gpu. Work In Progress"""
+import os
 import torch
-import vsl_cpp
+from torch.utils.cpp_extension import load
+
+vsl_cpp = load(name="vsl_cpp", sources=[os.path.join('vsl-extension', 'cpp', 'vsl_cpp.cpp')])
 
 
 class VariableShapeList(object):
