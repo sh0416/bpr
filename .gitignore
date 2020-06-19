@@ -15,3 +15,6 @@ vsl-extension/cpp/vsl_cpp.egg-info/PKG-INFO
 vsl-extension/cuda/vsl_cuda.egg-info/PKG-INFO
 *.so
 *.o
+.vscode/c_cpp_properties.json
+vsl/cpp/vsl_cpp.egg-info/PKG-INFO
+vsl/cuda/vsl_cuda.egg-info/PKG-INFO
